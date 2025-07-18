@@ -1,3 +1,5 @@
+py_src/star_tracker/build/*
+py_src/star_tracker/COTS_star_tracker.egg-info/*
 
 *.aux
 *.bmp
