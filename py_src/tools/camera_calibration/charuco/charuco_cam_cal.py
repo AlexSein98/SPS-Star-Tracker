@@ -27,13 +27,13 @@ import numpy as np
 #USER INPUT
 ################################
 show_plots = True
-img_extension = '.jpg'
+img_extension = '.png'
 
 # Define ChArUco target
-number_of_target_rows = 5
-number_of_target_columns = 5
-aruco_square_size = 2.25*0.0254 #m
-checker_square_size = 4.5*0.0254 #m
+number_of_target_rows = 8
+number_of_target_columns = 11
+aruco_square_size = 0.090066  # m
+checker_square_size = 0.124826  # m
 
 
 ################################
@@ -60,10 +60,10 @@ prev_img_shape = None
 
 # Create the ChArUco board dictionary
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
-Charuco_board = cv2.aruco.CharucoBoard_create(number_of_target_columns, number_of_target_rows, checker_square_size, aruco_square_size, dictionary)
+Charuco_board = cv2.aruco.CharucoBoard((number_of_target_columns, number_of_target_rows), checker_square_size, aruco_square_size, dictionary)
 
 # Extracting path of individual image stored in a given directory
-images = glob.glob('*'+img_extension)
+images = glob.glob('./CameraCalibration/ChArUco/*'+img_extension)
 
 print("\nLooking for images ending in " + str(img_extension)+"...")
 print('...found ' + str(len(images)) + ' images:')
@@ -100,6 +100,7 @@ for fname in images:
 
     # Detect ArUco markers
     corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, dictionary)
+    # print(rejectedImgPoints)
     # print(corners)
 
     """
@@ -112,6 +113,8 @@ for fname in images:
             corners, ids, gray, board=Charuco_board)
 
         print("    Detected "+str(len(corners))+" corners")
+
+        # cv2.imshow(img)
         # If the entire ChArUco board is detected
         if charuco_corners is not None and num_corners==16:
             found_corner_ctr += 1

@@ -30,7 +30,7 @@ import numpy as np
 ################################
 number_of_target_columns = 9 #9
 number_of_target_rows = 6 #6
-img_extension = '.jpg'
+img_extension = '.png'
 
 ################################
 #MAIN CODE
@@ -46,7 +46,7 @@ objp[:,:2] = np.mgrid[0:number_of_target_columns,0:number_of_target_rows].T.resh
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
 
-images = glob.glob('*'+img_extension)
+images = glob.glob('./CameraCalibration/*'+img_extension)
 
 print("\n\nAssuming checkerboard is "+str(number_of_target_rows)+" by "+str(number_of_target_columns))
 print('NOTE: ENSURE NUMBER OF SQUARES IS SET CORRECTLY (n-1 rows and n-1 columns)')

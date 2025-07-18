@@ -21,4 +21,5 @@ py_src/star_tracker/COTS_star_tracker.egg-info/*
 *.xml
 *.zip
 
-
+!CameraCalibration/Checkerboard/*.png
+!CameraCalibration/ChArUco/*.png
