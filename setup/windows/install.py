@@ -38,6 +38,7 @@ os.system('pip3 install astroquery') #required for astrometry verification
 os.system('pip3 --no-cache-dir install matplotlib --user')
 os.system('pip3 install --upgrade setuptools --user')
 os.system('pip3 --no-cache-dir install scipy --user')
+os.system('pip3 --no-cache-dir install spiceypy --user')
 
 #install module
 home = os.getcwd()
