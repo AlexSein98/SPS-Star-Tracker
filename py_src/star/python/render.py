@@ -287,8 +287,8 @@ if __name__ == "__main__":
         rightAscensions.append(float(sys.argv[2]))
         declinations.append(float(sys.argv[3]))
     else:
-        rightAscensions.append(60.0)
-        declinations.append(15.0)
+        rightAscensions.append(90.0)
+        declinations.append(0.0)
 
     # Get full star catalog
     catalog = read_csv_catalog(home + "data\\catalog.csv")
