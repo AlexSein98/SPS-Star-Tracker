@@ -41,9 +41,9 @@ os.system('pip3 --no-cache-dir install scipy --user')
 
 #install module
 home = os.getcwd()
-os.chdir('..')
-os.chdir('..')
-os.chdir('py_src/star_tracker')
+# os.chdir('..')
+# os.chdir('..')
+os.chdir('./py_src/star_tracker')
 os.system('pip3 install .')
 os.chdir(home)
 
