@@ -4,6 +4,7 @@ import sys
 import csv
 
 from matplotlib import pyplot as plt
+import matplotlib
 import spiceypy as spice
 
 
@@ -127,7 +128,16 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
     ax1 = fig.add_subplot(211)
     ax2 = fig.add_subplot(212)
     ax1.hist(errorsArcsec, bins=200, color='skyblue', edgecolor='black')
-    ax2.boxplot(errorsArcsec, orientation='horizontal', showfliers=False)
+    mpl_v = matplotlib.__version__.split(".")
+    mpl_v_maj = float(mpl_v[0])
+    mpl_v_min = float(mpl_v[1])
+    # mpl_v_patch = float(mpl_v[2])
+
+    # If matplotlib version is too low, the "orientation" kwarg is invalid. Need to use "vert: bool" for matplotlib < 3.10
+    if mpl_v_maj < 3 or mpl_v_min < 10:
+        ax2.boxplot(errorsArcsec, vert=False, showfliers=False)
+    else:
+        ax2.boxplot(errorsArcsec, orientation='horizontal', showfliers=False)
 
     # Nice plot stuff
     extraPrint = f' (errors > {reject} arcseconds rejected)'
