@@ -45,6 +45,43 @@ def r_hat_to_ra_dec(r_hat: np.ndarray[float]):
     return ra, dec
 
 
+def r_hat_to_latlon(r_hat: np.ndarray[float]):
+    lat = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
+    lon = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
+    return lat, lon
+
+
+def latlon_to_T(lat: float, lon: float):
+    return R3(np.deg2rad(lon)) @ R2(np.deg2rad(-lat))
+
+
+def T_to_latlon(T: np.ndarray[float]):
+    r_hat = T[:, 0]
+    return r_hat_to_latlon(r_hat)
+
+
+def T_angle_axis(angle: float, axis: np.ndarray[float]):
+    e_cross = np.array([[0.0, -axis[2], axis[1]], 
+                        [axis[2], 0.0, -axis[0]], 
+                        [-axis[1], axis[0], 0.0]])
+    return np.identity(3) - np.sin(angle) * e_cross + (1.0 - np.cos(angle)) * e_cross @ e_cross
+
+
+def TwoVectors_to_T(v1, v2):
+    axis = np.cross(v1, v2) / np.linalg.norm(np.cross(v1, v2))
+    angle = np.arccos(np.dot(v1, v2))
+    return T_angle_axis(angle, axis)
+
+
+def RADecRoll_to_Camera(RA: float, dec: float, roll: float):
+    return R3(np.deg2rad(RA)) @ R2(np.deg2rad(-dec)) @ R1(np.deg2rad(roll))
+
+
+def AttitudeError(T_true, T_est):
+    delta_T = T_true @ T_est.T
+    return np.rad2deg(np.arccos(0.5 * (np.trace(delta_T) - 1.0)))
+
+
 def deg_to_hms(deg: float) -> tuple[int, int, float]:
     hours = deg / 15.0
     fracMinSec, hoursWhole = np.modf(hours)

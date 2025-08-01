@@ -28,22 +28,22 @@ import time
 os.system('pip3 install pip --upgrade --user')
 os.system('pip3 install opencv-contrib-python --user')
 os.system('pip3 install psutil --user')
-os.system('pip3 install imageio') #required for catalog creation
-os.system('pip3 install astropy') #required for catalog creation
-os.system('pip3 install pandas') #required for catalog creation
+os.system('pip3 install imageio')  # required for catalog creation
+os.system('pip3 install astropy')  # required for catalog creation
+os.system('pip3 install pandas')  # required for catalog creation
 os.system('pip3 install statistics --user')
-os.system('pip3 install astroquery') #required for astrometry verification
+os.system('pip3 install astroquery')  # required for astrometry verification
 
-#must install freetype2 dev pkg first??
+# must install freetype2 dev pkg first??
 os.system('pip3 --no-cache-dir install matplotlib --user')
 os.system('pip3 install --upgrade setuptools --user')
 os.system('pip3 --no-cache-dir install scipy --user')
-os.system('pip3 --no-cache-dir install spiceypy --user')
+os.system('pip3 install spiceypy --user')  # required for planetary ephemerides
+os.system('pip install PyOpenGL --user')  # for OpenGL star rendering
+os.system('pip install PyOpenGL_accelerate --user')  # for OpenGL star rendering
 
-#install module
+# install module
 home = os.getcwd()
-# os.chdir('..')
-# os.chdir('..')
 os.chdir('./py_src/star_tracker')
 os.system('pip3 install .')
 os.chdir(home)
