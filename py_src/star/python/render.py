@@ -164,7 +164,7 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
     cameraPos = renderParams.cameraPos
 
     # diffractionLimitRad = diffraction_limit(560e-9, 0.005)  # diffraction for perfectly-focused green light hitting a Canon EOS Rebel T7 sensor (22.3 mm width)
-    diffractionLimitRad = diffraction_limit(560e-9, 0.005)  # diffraction for perfectly-focused green light hitting a Canon EOS Rebel T7 sensor (22.3 mm width)
+    diffractionLimitRad = diffraction_limit(560e-9, 0.003)
     diffractionLimitPx = rad_to_pixel(diffractionLimitRad, fieldOfViewU, dimU)
 
     for i in range(len(catalog_subset)):
@@ -212,10 +212,10 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
             # Handle how to render the planet
             mode = 0  # 0 is Gaussian, 1 is raytraced
             planetRadiusPx = planet_radius_pixels(planetName, cameraPos, etNow, fieldOfViewU, dimU, correctionMode=0)
-            if planetRadiusPx > 2.0 * diffractionLimitPx:  # something something Nyquist frequency? Idk?
+            if planetRadiusPx > 2.0 * min(diffractionLimitPx, 1.0):  # Nyquist frequency? Idk? But also render it if it's > 2 px
                 mode = 1
             
-            print(f'planetRadiusPx = {round(planetRadiusPx, 2)}, while 2*diffractionLimitPx = {round(2.0 * diffractionLimitPx, 2)}; choosing mode {mode} ({"Gaussian diffraction" if mode == 0 else "raytracing"})')
+            print(f'{planetName} radius (pixels) = {round(planetRadiusPx, 2)}, while 2 * diffraction limit (pixels) = {round(2.0 * diffractionLimitPx, 2)}; choosing mode {mode} ({"Gaussian diffraction" if mode == 0 else "raytracing"})')
             
             planetCoordsUV = camera_to_uv_centered(fieldOfViewU, fieldOfViewV, dimU, dimV, world_to_camera(T_ICRFCamera.T, planetPointing))
             magPlanet = planet_magnitude(planetName, cameraPos, etNow, correctionMode=0)
@@ -271,24 +271,30 @@ if __name__ == "__main__":
         home = sys.argv[1]
 
     # Delete all old images
-    dir_path = home + "python\\output"
-    if os.path.exists(dir_path):
-        shutil.rmtree(dir_path)
-    os.mkdir(os.path.join(home + "python", "output"))
+    delete_old = True
+    if delete_old:
+        dir_path = home + "python\\output"
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+        os.mkdir(os.path.join(home + "python", "output"))
 
     # Lists of right ascensions and declinations to render
     # step = 15.0
     # minDec = 45.0
     # rightAscensions = np.arange(0.0, 360.0, step)
     # declinations = np.arange(-minDec, minDec + step, step)
-    rightAscensions = []
-    declinations = []
-    if n > 3:
-        rightAscensions.append(float(sys.argv[2]))
-        declinations.append(float(sys.argv[3]))
-    else:
-        rightAscensions.append(90.0)
-        declinations.append(0.0)
+    
+    rightAscensions = [57.0]
+    declinations = [24.0]
+
+    # rightAscensions = []
+    # declinations = []
+    # if n > 3:
+    #     rightAscensions.append(float(sys.argv[2]))
+    #     declinations.append(float(sys.argv[3]))
+    # else:
+    #     rightAscensions.append(90.0)
+    #     declinations.append(0.0)
 
     # Get full star catalog
     catalog = read_csv_catalog(home + "data\\catalog.csv")
@@ -312,7 +318,7 @@ if __name__ == "__main__":
     # rightAscensions = []
     # declinations = []
     # associatedPlanets = []
-    # for i in range(len(allPlanets)):
+    # for i in range(4, 5):#len(allPlanets)):
     #     # if allPlanets[i] != "EARTH":
     #     if True:
     #         ra, de = get_planet_angular_pos(allPlanets[i], cameraPos, etNow, correctionMode=0)
@@ -323,7 +329,7 @@ if __name__ == "__main__":
     # Camera parameters
     dimU: int = 1024
     dimV: int = 1024
-    fovU: float = 20.0
+    fovU: float = 4.0
 
     # Render
     idx = 0
@@ -348,7 +354,7 @@ if __name__ == "__main__":
     #     fovU = 4.0 * np.rad2deg(planetRadii[associatedPlanets[i]] / np.linalg.norm(planetPos))
     #     relativeMagnitude = planet_solar_flux_to_mag(associatedPlanets[i], etNow, correctionMode=0)
     #     print(f'Rendering image {idx} of {len(rightAscensions)} ({round(100.0 * float(idx) / len(rightAscensions), 2)}%):\n    FOV = {round(fovU, 4)} deg\n    RA = {round(ra, 1)}\n    Dec = {round(de, 1)}\n    Focus planet = {associatedPlanets[i]}')
-    #     render(ra, de, RenderParams(etJ2000, etNow, cameraPos, dimU, dimV, fovU, starMaxPixelRadius, catalog, relativeMagnitude, relativeFlux))
+    #     render(ra, de, RenderParams(etJ2000, etNow, cameraPos, dimU, dimV, fovU, starMaxPixelRadius, catalog, relativeMagnitude, relativeFlux), home)
     #     true_data.append(get_true_attitude(ra, de))
     
     # Write output
