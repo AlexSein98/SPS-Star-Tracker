@@ -1,5 +1,5 @@
-from catalog import *
-from planet import *
+from py_src.star.python.catalog import *
+from py_src.star.python.planet import *
 
 import cv2
 import shutil

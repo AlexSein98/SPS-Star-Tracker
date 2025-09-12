@@ -1,4 +1,4 @@
-from catalog import *
+from py_src.star.python.catalog import *
 import spiceypy as spice
 import itertools
 

@@ -2,7 +2,7 @@ import csv
 import json
 import sys
 
-from transformations import *
+from py_src.star.python.transformations import *
 
 
 def ra_dec_to_rot(rightAscension: float, declination: float):
