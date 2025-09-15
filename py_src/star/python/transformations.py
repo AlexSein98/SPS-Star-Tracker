@@ -60,16 +60,25 @@ def T_to_latlon(T: np.ndarray[float]):
     return r_hat_to_latlon(r_hat)
 
 
-def T_angle_axis(angle: float, axis: np.ndarray[float]):
+def T_angle_axis(angle: float, axis: np.ndarray[float]) -> np.ndarray[float]:
     e_cross = np.array([[0.0, -axis[2], axis[1]], 
                         [axis[2], 0.0, -axis[0]], 
                         [-axis[1], axis[0], 0.0]])
     return np.identity(3) - np.sin(angle) * e_cross + (1.0 - np.cos(angle)) * e_cross @ e_cross
 
 
+def arccos_safe(arg):
+    if arg > 1.0:
+        return 0.0
+    elif arg < -1.0:
+        return np.pi
+    else:
+        return np.arccos(arg)
+
+
 def TwoVectors_to_T(v1, v2):
-    axis = np.cross(v1, v2) / np.linalg.norm(np.cross(v1, v2))
-    angle = np.arccos(np.dot(v1, v2))
+    axis = normalize(np.cross(v1, v2))
+    angle = arccos_safe(np.dot(normalize(v1), normalize(v2)))
     return T_angle_axis(angle, axis)
 
 

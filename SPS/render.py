@@ -58,7 +58,7 @@ if __name__ == "__main__":
         lon = latLonAlts[i][1]
         alt = latLonAlts[i][2]
         cameraPosMoonFixed = r_hat(lon, lat)  # * (alt + rMoon)
-        cameraPosMoonCentered = moonRot @ cameraPosMoonFixed
+        cameraPosMoonCentered =  normalize((moonRot.T @ np.array([cameraPosMoonFixed]).T).T[0])
         ra, de = r_hat_to_ra_dec(cameraPosMoonCentered)
     
         moonPos, _ = spice.spkezp(301, etNow, "J2000", "NONE", 0)
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
         # Render
         idx += 1
-        print(f'Rendering image {idx} of {numImages} ({round(100.0 * float(idx) / numImages, 2)}%): RA = {round(ra, 1)}, Dec = {round(de, 1)}')
+        print(f'Rendering image {idx} of {numImages} ({round(100.0 * float(idx) / numImages, 2)}%): RA = {round(ra, 3)}, Dec = {round(de, 3)}')
         params = RenderParams(etJ2000, etNow, cameraPos, dimU, dimV, fovU, starMaxPixelRadius, catalog, relativeMagnitude, relativeFlux)
         
         # Actually do the render

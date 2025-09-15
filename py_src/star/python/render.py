@@ -245,7 +245,7 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
 
     # Save image
     img = cv2.cvtColor(np.clip(img_array, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-    destination = home_dir + 'python\\output\\StarRender_ra_' + str(round(ra, 0)) + '_de_' + str(round(de, 0)) + '.png'
+    destination = home_dir + 'python\\output\\StarRender_ra_' + str(round(ra, 3)) + '_de_' + str(round(de, 3)) + '.png'
     cv2.imwrite(destination, img)
 
 

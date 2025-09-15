@@ -37,7 +37,7 @@ if __name__ == "__main__":
     rMars = 3396190.0
     rPhobos = 11000.0
 
-    numLon: int = 12
+    numLon: int = 24
     numLat: int = int(0.5 * numLon - 1)
     
     dem = ReadDEM(moonDEM)

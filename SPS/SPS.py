@@ -2,6 +2,7 @@ from SPS.grav_moon_GRAIL150 import *
 from py_src.star.python.transformations import *
 
 import sys
+import os
 import csv
 import copy
 
@@ -200,7 +201,14 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
     plt.show()
 
 
-def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str):
+def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str):    
+    # Transformation from inertial to planet frame
+    home = ".\\py_src\\star\\"
+    spice.furnsh(home + "data\\metakernel.txt")
+    tNow = '2025 July 4, 00:00:00 UTC'
+    etNow = spice.str2et(tNow)
+    T_i_b = spice.pxform("J2000", "MOON_PA", etNow)
+
     truthData = read_csv(truthDataPath)
     estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
     latLonData = read_csv(latLonDataPath)
@@ -219,26 +227,31 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     # Cilm = np.zeros((2, max_degree + 1, max_order + 1))  # testing spherical gravity
     Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
 
-    for i in range(len(truthData)):
-        truth_i = truthData[i]
-        est_i = estData[i]
-        latLon_i = latLonDataPath[i]
+    distanceErrors_m = []
+    distanceErrors_km = []
+
+    for j in range(len(truthData)):
+    # for j in range(len(truthData) - 1, len(truthData)):
+        # print(f'True lat/lon = {latLonData[i]}')
+        truth_j = truthData[j]
+        est_j = estData[j]
+        latLon_j = latLonData[j]
         
-        if est_i[0] == 999 or est_i[1] == 999 or est_i[2] == 999 or est_i[3] == 999:
+        if est_j[0] == 999 or est_j[1] == 999 or est_j[2] == 999 or est_j[3] == 999:
             continue
         
-        q_real = Quaternion(truth_i[0], truth_i[1], truth_i[2], truth_i[3]).normalize()
-        q_est = Quaternion(est_i[0], est_i[1], est_i[2], est_i[3]).normalize()
+        q_real = Quaternion(truth_j[0], truth_j[1], truth_j[2], truth_j[3]).normalize()
+        q_est = Quaternion(est_j[0], est_j[1], est_j[2], est_j[3]).normalize()
         
         lat = 0.0 
         lon = 0.0
         
         T_g_c = np.identity(3)  # transformation from gravity to camera frame
-        
-        T_i_b = np.identity(3)  # transformation from inertial to planet frame
+
+        # print(f'T_i_b = {T_i_b}')
         
         T_s_g = np.identity(3)  # transformation from surface to gravity frame
-        T_s_g_old = T_angle_axis(np.deg2rad(5.0), np.array([0, 0, 1]))
+        T_s_g_old = T_angle_axis(np.deg2rad(1.0), np.array([0, 0, 1]))
         
         T_i_c = q_est.to_matrix()
         
@@ -250,22 +263,73 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
             T_s_g_old = copy.deepcopy(T_s_g)
             
             T_b_s = T_s_g.T @ T_g_c.T @ T_i_c @ T_i_b.T  # transformation from planet to surface frame
-            lat, lon = T_to_latlon(T_b_s)
+            lat, lon = T_to_latlon(T_b_s.T)
             
             g = sample_gravity(moon, Cilm, lat, lon, moon.radius, max_degree)
-            p_hat_gc = T_b_s[:, 0]
+            p_hat_gc = T_b_s.T[:, 0]
+            # g = -moon.mu * p_hat_gc / ((moon.radius + 0.001 * latLon_j[2]) ** 2)
             p_hat_as = -g / np.linalg.norm(g)
+
             T_s_g = TwoVectors_to_T(p_hat_as, p_hat_gc)
             
             print(f'Run {i}:')
+            print(f'p_hat_gc = {p_hat_gc}')
+            print(f'p_hat_as = {p_hat_as}')
             print(f'err = {round(AttitudeError(T_s_g, T_s_g_old) * 3600.0, 1)}"')
             print(f'lat = {lat} deg')
             print(f'lon = {lon} deg\n')
         
-        latTruth = latLon_i[0]
-        lonTruth = latLon_i[1]
-        distance_err = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
-        print(f'distance_err = {round(distance_err * 1000.0, 1)} m')
+        latTruth = float(latLon_j[0])
+        lonTruth = float(latLon_j[1])
+
+        print(f'Estimated lat = {lat} deg')
+        print(f'Estimated lon = {lon} deg')
+        print(f'True lat = {latTruth} deg')
+        print(f'True lon = {lonTruth} deg\n')
+
+        distanceErr = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
+        distanceErrors_m.append(1000.0 * distanceErr)
+        distanceErrors_km.append(distanceErr)
+        print(f'Distance error = {round(1000.0 * distanceErr, 1)} m\n')
+        # print(f'Distance error = {round(distanceErr, 3)} km\n')
+    
+    # Calculate statistics
+    mean = np.mean(distanceErrors_m)
+    median = np.median(distanceErrors_m)
+    std = np.std(distanceErrors_m)
+
+    # Print statistics
+    print(f'Mean                        = {round(mean, 1)} m')
+    print(f'Median                      = {round(median, 1)} m')
+    print(f'Standard Deviation          = {round(std, 1)} m')
+
+    # Plot histogram and box plot of errors
+    fig = plt.figure()
+    ax1 = fig.add_subplot(211)
+    ax2 = fig.add_subplot(212)
+    ax1.hist(distanceErrors_m, bins=200, color='skyblue', edgecolor='black')
+    mpl_v = matplotlib.__version__.split(".")
+    mpl_v_maj = float(mpl_v[0])
+    mpl_v_min = float(mpl_v[1])
+    # mpl_v_patch = float(mpl_v[2])
+
+    # If matplotlib version is too low, the "orientation" kwarg is invalid. Need to use "vert: bool" for matplotlib < 3.10
+    if mpl_v_maj < 3 or mpl_v_min < 10:
+        ax2.boxplot(distanceErrors_m, vert=False, showfliers=False)
+    else:
+        ax2.boxplot(distanceErrors_m, orientation='horizontal', showfliers=False)
+
+    # Nice plot stuff
+    ax1.set_title(f'Position Error Counts for {len(distanceErrors_m)}/{len(truthData)} Samples')
+    ax1.set_xlabel('Error (m)')
+    ax1.set_ylabel('Count')
+    ax1.grid()
+    ax2.set_title(f'Position Error Statistics for {len(distanceErrors_m)}/{len(truthData)} Samples')
+    ax2.set_xlabel('Error (m)')
+    ax2.grid()
+
+    # Show plot
+    plt.show()
 
 
 def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
@@ -279,6 +343,8 @@ def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
 
 
 if __name__ == "__main__":
+    os.system('cls')
+
     rEarth = 6378136.3
     rMoon = 1737400.0
     rMars = 3396190.0
