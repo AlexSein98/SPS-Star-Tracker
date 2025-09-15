@@ -221,8 +221,8 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     errorsArcsec = []
     moon = grav_moon_GRAIL150()
 
-    max_degree = 32
-    max_order = 32
+    max_degree = 0
+    max_order = 0
     Cilm = np.dstack((moon.Clm[:max_degree + 1, :max_order + 1], moon.Slm[:max_degree + 1, :max_order + 1])).transpose((2, 0, 1))
     # Cilm = np.zeros((2, max_degree + 1, max_order + 1))  # testing spherical gravity
     Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
