@@ -200,12 +200,13 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
     plt.show()
 
 
-def estimate_position(truthDataPath: str, estDataPath: str, lat_truth: float, lon_truth: float):
+def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str):
     truthData = read_csv(truthDataPath)
     estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
+    latLonData = read_csv(latLonDataPath)
     
     # Very basic error handling if datasets are not the same length
-    if len(truthData) != len(estData):
+    if not (len(truthData) == len(estData) == len(latLonData)):
         return
 
     # Compare data
@@ -221,6 +222,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, lat_truth: float, lo
     for i in range(len(truthData)):
         truth_i = truthData[i]
         est_i = estData[i]
+        latLon_i = latLonDataPath[i]
         
         if est_i[0] == 999 or est_i[1] == 999 or est_i[2] == 999 or est_i[3] == 999:
             continue
@@ -260,7 +262,9 @@ def estimate_position(truthDataPath: str, estDataPath: str, lat_truth: float, lo
             print(f'lat = {lat} deg')
             print(f'lon = {lon} deg\n')
         
-        distance_err = archaversine(moon.radius, np.deg2rad(lat_truth), np.deg2rad(lat), np.deg2rad(lon_truth), np.deg2rad(lon))
+        latTruth = latLon_i[0]
+        lonTruth = latLon_i[1]
+        distance_err = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
         print(f'distance_err = {round(distance_err * 1000.0, 1)} m')
 
 
@@ -275,10 +279,10 @@ def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
 
 
 if __name__ == "__main__":
-    # rEarth = 6378136.3
-    # rMoon = 1737400.0
-    # rMars = 3389500.0
-    # rPhobos = 11000.0
+    rEarth = 6378136.3
+    rMoon = 1737400.0
+    rMars = 3396190.0
+    rPhobos = 11000.0
 
     # Star tracker "measurements" file
     n = len(sys.argv)
@@ -290,6 +294,10 @@ if __name__ == "__main__":
     truthSourceDir = ".\\py_src\\star\\"
     if n > 2:
         truthSourceDir = sys.argv[2]
+    
+    latLonDataPath = ".\\sampleLatLongs.csv"
+    if n > 3:
+        latLonDataPath = sys.argv[3]
     
     # # Cutoff for "good measurements" in arcseconds
     # reject = 0.0
@@ -303,17 +311,5 @@ if __name__ == "__main__":
     # else:
     #     radius = rEarth
 
-    # True latitude
-    lat_truth = 0.0
-    if n > 3:
-        lat_truth = float(sys.argv[3])
-    
-    # True longitude
-    lon_truth = -90.0
-    if n > 4:
-        lon_truth = float(sys.argv[4])
-
-    print(f'{truthSourceDir + "truth_data.csv"}')
-
-    estimate_position(truthSourceDir + "truth_data.csv", measurements, lat_truth, lon_truth)
+    estimate_position(truthSourceDir + "truth_data.csv", measurements, latLonDataPath)
     pass

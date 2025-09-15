@@ -163,8 +163,8 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
     etNow = renderParams.etNow
     cameraPos = renderParams.cameraPos
 
-    # diffractionLimitRad = diffraction_limit(560e-9, 0.005)  # diffraction for perfectly-focused green light hitting a Canon EOS Rebel T7 sensor (22.3 mm width)
-    diffractionLimitRad = diffraction_limit(560e-9, 0.003)
+    diffractionLimitRad = diffraction_limit(560e-9, 0.005)  # diffraction for perfectly-focused green light hitting a Canon EOS Rebel T7 sensor (22.3 mm width)
+    # diffractionLimitRad = diffraction_limit(560e-9, 0.003)
     diffractionLimitPx = rad_to_pixel(diffractionLimitRad, fieldOfViewU, dimU)
 
     for i in range(len(catalog_subset)):
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     # declinations = np.arange(-minDec, minDec + step, step)
     
     rightAscensions = [57.0]
-    declinations = [24.0]
+    declinations = [45.0]
 
     # rightAscensions = []
     # declinations = []
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     # Camera parameters
     dimU: int = 1024
     dimV: int = 1024
-    fovU: float = 4.0
+    fovU: float = 20.0
 
     # Render
     idx = 0

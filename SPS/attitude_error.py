@@ -89,6 +89,7 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
     
     # Very basic error handling if datasets are not the same length
     if len(truthData) != len(estData):
+        print(f"Unequal length! Truth data length is {len(truthData)}, while estimate data length is {len(estData)}")
         return
 
     # Compare data
@@ -157,9 +158,9 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
 
 if __name__ == "__main__":
     rEarth = 6378136.3
-    # rMoon = 1737400.0
-    # rMars = 3389500.0
-    # rPhobos = 11000.0
+    rMoon = 1737400.0
+    rMars = 3396190.0
+    rPhobos = 11000.0
 
     # Star tracker "measurements" file
     n = len(sys.argv)
@@ -182,7 +183,7 @@ if __name__ == "__main__":
     if n > 4:
         radius = float(sys.argv[4])
     else:
-        radius = rEarth
+        radius = rMoon
 
     print(f'{truthSourceDir + "truth_data.csv"}')
     plot_errors(truthSourceDir + "truth_data.csv", measurements, reject=reject, planetRadius=radius)

@@ -193,9 +193,9 @@ else:
     filename = home + "output.csv"
 
 with open(filename,'w', newline='') as csv_file:
-             writer=csv.writer(csv_file)
-             writer.writerow(keys)
-             writer.writerows(zip(*[data[key] for  key in keys]))
+    writer=csv.writer(csv_file)
+    writer.writerow(keys)
+    writer.writerows(zip(*[data[key] for  key in keys]))
 
 print("\n\n took " + str(time.time()-total_start) + " seconds to complete \n\n")
 print("data saved to: " + filename)
