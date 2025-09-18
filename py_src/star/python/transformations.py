@@ -51,6 +51,14 @@ def r_hat_to_latlon(r_hat: np.ndarray[float]):
     return lat, lon
 
 
+def r_to_latlonalt(r: np.ndarray[float], R: float):
+    r_hat = normalize(r)
+    lat = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
+    lon = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
+    alt = np.linalg.norm(r) - R
+    return lat, lon, alt
+
+
 def latlon_to_T(lat: float, lon: float):
     return R3(np.deg2rad(lon)) @ R2(np.deg2rad(-lat))
 
@@ -86,8 +94,8 @@ def RADecRoll_to_Camera(RA: float, dec: float, roll: float):
     return R3(np.deg2rad(RA)) @ R2(np.deg2rad(-dec)) @ R1(np.deg2rad(roll))
 
 
-def AttitudeError(T_true, T_est):
-    delta_T = T_true @ T_est.T
+def AttitudeError(T_true: np.ndarray[float], T_est: np.ndarray[float]) -> float:
+    delta_T: np.ndarray[float] = T_true @ T_est.T
     return np.rad2deg(np.arccos(0.5 * (np.trace(delta_T) - 1.0)))
 
 

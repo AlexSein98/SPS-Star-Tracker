@@ -83,20 +83,28 @@ def arcsec_to_rad(angle):
     return np.deg2rad(angle / 3600.0)
 
 
-def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRadius: float=6378136.3):
+def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, reject: float=0, planetRadius: float=6378136.3):
     truthData = read_csv(truthDataPath)
     estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
+    latLonData = read_csv(latLonDataPath)
     
     # Very basic error handling if datasets are not the same length
     if len(truthData) != len(estData):
         print(f"Unequal length! Truth data length is {len(truthData)}, while estimate data length is {len(estData)}")
         return
 
-    # Compare data
+    # Initialize error arrays
     errorsArcsec = []
+    L: int = len(truthData)
+    numLon: int = int(1.0 + np.sqrt(1.0 + 2.0 * float(L)))
+    numLat: int = int(float(L) / float(numLon))
+    errorsArcsecArray: np.ndarray[float] = np.zeros((numLat, numLon))
+
+    # Compare data
     for i in range(len(truthData)):
         truth_i = truthData[i]
         est_i = estData[i]
+        latLon_i = latLonData[i]
         
         if est_i[0] == 999 or est_i[1] == 999 or est_i[2] == 999 or est_i[3] == 999:
             continue
@@ -107,6 +115,13 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
         m = spice.q2m(q_err.as_w_first_array())
         phi_d, _ = matrix_to_angleaxis(m)
         phi_arcsec = deg_to_arcsec(phi_d)
+
+        # Add to plotting array even if it's
+        latTruth = float(latLon_i[0])
+        lonTruth = float(latLon_i[1])
+        latIdx = int(numLat * (latTruth + 90.0) / 180.0)
+        lonIdx = int(numLon * (lonTruth + 180.0) / 360.0)
+        errorsArcsecArray[latIdx, lonIdx] = phi_arcsec if phi_arcsec < reject else reject
         
         if reject != 0 and phi_arcsec > reject:
             continue
@@ -122,6 +137,8 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
     print(f'Mean                        = {round(mean, 3)} arcseconds')
     print(f'Median                      = {round(median, 3)} arcseconds')
     print(f'Standard Deviation          = {round(std, 3)} arcseconds')
+    print(f'Minimum                     = {round(min(errorsArcsec), 3)} arcseconds = {round(min(errorsArcsec) / 3600.0, 6)} deg')
+    print(f'Maximum                     = {round(max(errorsArcsec), 3)} arcseconds = {round(max(errorsArcsec) / 3600.0, 6)} deg')
     print(f'Projected SPS Mean Error    = {round(projectedSPSMeanError, 1)} meters')
 
     # Plot histogram and box plot of errors
@@ -152,6 +169,16 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
     ax2.set_xlabel('Error (arcseconds)')
     ax2.grid()
 
+    fig2 = plt.figure()
+    ax3 = fig2.add_subplot(111)
+    plt.sca(ax3)
+
+    plt.imshow(errorsArcsecArray, cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
+    plt.colorbar(label='Star Sensor Attitude Error (arcsec)')
+    ax3.set_xlabel("Longitude")
+    ax3.set_ylabel("Latitude")
+    ax3.set_title("Star Sensor Attitude Estimation Error")
+
     # Show plot
     plt.show()
 
@@ -173,17 +200,22 @@ if __name__ == "__main__":
     if n > 2:
         truthSourceDir = sys.argv[2]
     
-    # Cutoff for "good measurements" in arcseconds
-    reject = 0.0
+    # Latitude, longitude, and altitude
+    latLonDataPath = ".\\sampleLatLongs.csv"
     if n > 3:
-        reject = float(sys.argv[3])
+        latLonDataPath = sys.argv[3]
+    
+    # Cutoff for "good measurements" in arcseconds
+    reject = 360
+    if n > 4:
+        reject = float(sys.argv[4])
     
     # Planet radius for evaluating location error
     radius = 0.0
-    if n > 4:
-        radius = float(sys.argv[4])
+    if n > 5:
+        radius = float(sys.argv[5])
     else:
         radius = rMoon
 
     print(f'{truthSourceDir + "truth_data.csv"}')
-    plot_errors(truthSourceDir + "truth_data.csv", measurements, reject=reject, planetRadius=radius)
+    plot_errors(truthSourceDir + "truth_data.csv", measurements, latLonDataPath, reject=reject, planetRadius=radius)

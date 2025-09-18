@@ -74,7 +74,7 @@ if __name__ == "__main__":
     rMars = 3396190.0
     rPhobos = 11000.0
 
-    numLon: int = 360
+    numLon: int = 180
     numLat: int = int(0.5 * numLon - 1)
 
     dem = ReadDEM(moonDEM)
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
-    plt.imshow(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))), cmap='viridis', aspect='equal', extent = [-180,180,-90,90])
+    plt.imshow(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))), cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
     plt.colorbar(label='Gravity Vector Difference (arcsec)')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")

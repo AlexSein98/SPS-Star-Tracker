@@ -18,7 +18,7 @@ def ReadDEM(path: str) -> np.ndarray[float]:
     return dem
 
 
-def SampleDEM(dem: np.ndarray[float], _i: float, _j: float):
+def SampleDEM(dem: np.ndarray[float], _i: float, _j: float) -> float:
     _i_minus: int = int(np.floor(_i))
     _i_plus: int = int((_i_minus + 1) % dem.shape[0])
     _j_minus: int = int(np.floor(_j))
@@ -31,13 +31,21 @@ def SampleDEM(dem: np.ndarray[float], _i: float, _j: float):
     return 0.25 * (sample_i_minus_j_minus + sample_i_plus_j_minus + sample_i_minus_j_plus + sample_i_plus_j_plus)
 
 
+def SampleDEM_LatLon(dem: np.ndarray[float], lat: float, lon: float) -> float:
+    countLat = dem.shape[0]
+    countLon = dem.shape[1]
+    _i = countLat * (lat + 90.0) / 180.0
+    _j = countLon * (lon + 180.0) / 360.0
+    return SampleDEM(dem, _i, _j)
+
+
 if __name__ == "__main__":
     rEarth = 6378136.3
     rMoon = 1737400.0
     rMars = 3396190.0
     rPhobos = 11000.0
 
-    numLon: int = 24
+    numLon: int = 180
     numLat: int = int(0.5 * numLon - 1)
     
     dem = ReadDEM(moonDEM)

@@ -201,47 +201,47 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
                 img_array[v][u] += intensity * np.array([catalog_subset[i][13], catalog_subset[i][14], catalog_subset[i][15]])
 
     # Render planets
-    planetsInView, planetColors = get_planets_in_frame(cameraPos, T_ICRFCamera, etNow, fieldOfViewU, fieldOfViewV, correctionMode=0, toleranceDegrees=1.0)
-    if len(planetsInView) > 0.0:
-        img_planet = np.zeros((dimV, dimU, 3))
-        for i in range(len(planetsInView)):
-            planetName = planetsInView[i]
-            planetPointing, _ = get_planet_pos(planetName, cameraPos, etNow, correctionMode=0)
-            planetPointing = normalize(planetPointing)
+    # planetsInView, planetColors = get_planets_in_frame(cameraPos, T_ICRFCamera, etNow, fieldOfViewU, fieldOfViewV, correctionMode=0, toleranceDegrees=1.0)
+    # if len(planetsInView) > 0.0:
+    #     img_planet = np.zeros((dimV, dimU, 3))
+    #     for i in range(len(planetsInView)):
+    #         planetName = planetsInView[i]
+    #         planetPointing, _ = get_planet_pos(planetName, cameraPos, etNow, correctionMode=0)
+    #         planetPointing = normalize(planetPointing)
 
-            # Handle how to render the planet
-            mode = 0  # 0 is Gaussian, 1 is raytraced
-            planetRadiusPx = planet_radius_pixels(planetName, cameraPos, etNow, fieldOfViewU, dimU, correctionMode=0)
-            if planetRadiusPx > 2.0 * min(diffractionLimitPx, 1.0):  # Nyquist frequency? Idk? But also render it if it's > 2 px
-                mode = 1
+    #         # Handle how to render the planet
+    #         mode = 0  # 0 is Gaussian, 1 is raytraced
+    #         planetRadiusPx = planet_radius_pixels(planetName, cameraPos, etNow, fieldOfViewU, dimU, correctionMode=0)
+    #         if planetRadiusPx > 2.0 * min(diffractionLimitPx, 1.0):  # Nyquist frequency? Idk? But also render it if it's > 2 px
+    #             mode = 1
             
-            print(f'{planetName} radius (pixels) = {round(planetRadiusPx, 2)}, while 2 * diffraction limit (pixels) = {round(2.0 * diffractionLimitPx, 2)}; choosing mode {mode} ({"Gaussian diffraction" if mode == 0 else "raytracing"})')
+    #         print(f'{planetName} radius (pixels) = {round(planetRadiusPx, 2)}, while 2 * diffraction limit (pixels) = {round(2.0 * diffractionLimitPx, 2)}; choosing mode {mode} ({"Gaussian diffraction" if mode == 0 else "raytracing"})')
             
-            planetCoordsUV = camera_to_uv_centered(fieldOfViewU, fieldOfViewV, dimU, dimV, world_to_camera(T_ICRFCamera.T, planetPointing))
-            magPlanet = planet_magnitude(planetName, cameraPos, etNow, correctionMode=0)
-            fluxPlanet = magnitude_to_flux(magPlanet, relativeMagnitude, relativeFlux)
+    #         planetCoordsUV = camera_to_uv_centered(fieldOfViewU, fieldOfViewV, dimU, dimV, world_to_camera(T_ICRFCamera.T, planetPointing))
+    #         magPlanet = planet_magnitude(planetName, cameraPos, etNow, correctionMode=0)
+    #         fluxPlanet = magnitude_to_flux(magPlanet, relativeMagnitude, relativeFlux)
             
-            if mode == 0:
-                falloff = falloff_gaussian(0.0, fluxPlanet, 1.0 / 255.0, diffractionLimitPx)
-                pixelRadius = max(np.ceil(10.0 * falloff), renderParams.pixelRadius)
-            elif mode == 1:
-                pixelRadius = np.ceil(1.2 * planetRadiusPx)
+    #         if mode == 0:
+    #             falloff = falloff_gaussian(0.0, fluxPlanet, 1.0 / 255.0, diffractionLimitPx)
+    #             pixelRadius = max(np.ceil(10.0 * falloff), renderParams.pixelRadius)
+    #         elif mode == 1:
+    #             pixelRadius = np.ceil(1.2 * planetRadiusPx)
             
-            pixelLimitsU = [clamp(int(planetCoordsUV[0] + centerU - pixelRadius), 0, dimU - 1), clamp(int(planetCoordsUV[0] + centerU + pixelRadius), 0, dimU - 1)]
-            pixelLimitsV = [clamp(int(planetCoordsUV[1] + centerV - pixelRadius), 0, dimV - 1), clamp(int(planetCoordsUV[1] + centerV + pixelRadius), 0, dimV - 1)]
+    #         pixelLimitsU = [clamp(int(planetCoordsUV[0] + centerU - pixelRadius), 0, dimU - 1), clamp(int(planetCoordsUV[0] + centerU + pixelRadius), 0, dimU - 1)]
+    #         pixelLimitsV = [clamp(int(planetCoordsUV[1] + centerV - pixelRadius), 0, dimV - 1), clamp(int(planetCoordsUV[1] + centerV + pixelRadius), 0, dimV - 1)]
             
-            # Let's not sample from SPICE within the loop so we can eventually multithread it
-            pos_PlanetSSB, _ = get_planet_pos(planetName, np.zeros(3), etNow, correctionMode=0)  # planet position wrt SSB
-            pos_SunPlanet, _ = get_planet_pos("SUN", pos_PlanetSSB, etNow, correctionMode=0)  # Sun position wrt planet
-            rot_PlanetSSB = spice.pxform("J2000", planetBodyFrames[planetName], etNow)
-            normal_SunPlanet = normalize(pos_SunPlanet)
+    #         # Let's not sample from SPICE within the loop so we can eventually multithread it
+    #         pos_PlanetSSB, _ = get_planet_pos(planetName, np.zeros(3), etNow, correctionMode=0)  # planet position wrt SSB
+    #         pos_SunPlanet, _ = get_planet_pos("SUN", pos_PlanetSSB, etNow, correctionMode=0)  # Sun position wrt planet
+    #         rot_PlanetSSB = spice.pxform("J2000", planetBodyFrames[planetName], etNow)
+    #         normal_SunPlanet = normalize(pos_SunPlanet)
 
-            for u in range(pixelLimitsU[0], pixelLimitsU[1]):
-                for v in range(pixelLimitsV[0], pixelLimitsV[1]):
-                    fluxPlanet = 0.5 * magnitude_to_flux(planet_solar_flux_to_mag(planetName, etNow, correctionMode=0), relativeMagnitude, relativeFlux)
-                    img_planet[v][u] += sample_color_for_planets(i, u, v, centerU, centerV, mode, planetName, planetCoordsUV, fluxPlanet, diffractionLimitPx, planetColors, 
-                                                                pos_PlanetSSB, normal_SunPlanet, rot_PlanetSSB, cameraPos, T_ICRFCamera, fieldOfViewU, fieldOfViewV, dimU, dimV)
-        img_array += bloom(img_planet)
+    #         for u in range(pixelLimitsU[0], pixelLimitsU[1]):
+    #             for v in range(pixelLimitsV[0], pixelLimitsV[1]):
+    #                 fluxPlanet = 0.5 * magnitude_to_flux(planet_solar_flux_to_mag(planetName, etNow, correctionMode=0), relativeMagnitude, relativeFlux)
+    #                 img_planet[v][u] += sample_color_for_planets(i, u, v, centerU, centerV, mode, planetName, planetCoordsUV, fluxPlanet, diffractionLimitPx, planetColors, 
+    #                                                             pos_PlanetSSB, normal_SunPlanet, rot_PlanetSSB, cameraPos, T_ICRFCamera, fieldOfViewU, fieldOfViewV, dimU, dimV)
+    #     img_array += bloom(img_planet)
 
     # Save image
     img = cv2.cvtColor(np.clip(img_array, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)

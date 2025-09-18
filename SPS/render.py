@@ -1,4 +1,5 @@
 from py_src.star.python.render import *
+from SPS.gravity import *
 
 import os
 import sys
@@ -53,13 +54,20 @@ if __name__ == "__main__":
     numImages = len(latLonAlts)
     true_data = []
 
+    maxDegree = 128
+    maxOrder = 128
+    sampler = GravSampler(maxDegree, maxOrder)
+
     for i in range(len(latLonAlts)):
         lat = latLonAlts[i][0]
         lon = latLonAlts[i][1]
         alt = latLonAlts[i][2]
         cameraPosMoonFixed = r_hat(lon, lat)  # * (alt + rMoon)
-        cameraPosMoonCentered =  normalize((moonRot.T @ np.array([cameraPosMoonFixed]).T).T[0])
-        ra, de = r_hat_to_ra_dec(cameraPosMoonCentered)
+        cameraPosMoonCentered = (moonRot.T @ np.array([cameraPosMoonFixed]).T).T[0]
+
+        g = sampler.SampleGravity(lat, lon, moon.radius + 0.001 * alt, maxDegree)
+        gInertial = (moonRot.T @ np.array([g]).T).T[0]
+        ra, de = r_hat_to_ra_dec(-normalize(gInertial))
     
         moonPos, _ = spice.spkezp(301, etNow, "J2000", "NONE", 0)
         cameraPos = moonPos + cameraPosMoonCentered

@@ -1,5 +1,7 @@
-from SPS.grav_moon_GRAIL150 import *
+# from SPS.grav_moon_GRAIL150 import *
 from py_src.star.python.transformations import *
+from SPS.gravity import *
+from SPS.SPS_samples import *
 
 import sys
 import os
@@ -9,10 +11,6 @@ import copy
 from matplotlib import pyplot as plt
 import matplotlib
 import spiceypy as spice
-
-import pyshtools as sh
-import pyshtools.gravmag as grav
-from pyshtools.gravmag import MakeGravGridPoint
 
 
 def read_csv(path: str, ignore: list=[], hasHeader=False):
@@ -209,6 +207,8 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     etNow = spice.str2et(tNow)
     T_i_b = spice.pxform("J2000", "MOON_PA", etNow)
 
+    dem = ReadDEM(moonDEM)
+
     truthData = read_csv(truthDataPath)
     estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
     latLonData = read_csv(latLonDataPath)
@@ -217,22 +217,21 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     if not (len(truthData) == len(estData) == len(latLonData)):
         return
 
-    # Compare data
-    errorsArcsec = []
-    moon = grav_moon_GRAIL150()
+    maxDegree = 128
+    maxOrder = 128
+    sampler = GravSampler(maxDegree, maxOrder)
 
-    max_degree = 0
-    max_order = 0
-    Cilm = np.dstack((moon.Clm[:max_degree + 1, :max_order + 1], moon.Slm[:max_degree + 1, :max_order + 1])).transpose((2, 0, 1))
-    # Cilm = np.zeros((2, max_degree + 1, max_order + 1))  # testing spherical gravity
-    Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
+    distanceErrors_m: list[float] = []
+    distanceErrors_km: list[float] = []
 
-    distanceErrors_m = []
-    distanceErrors_km = []
+    L: int = len(truthData)
+    numLon: int = int(1.0 + np.sqrt(1.0 + 2.0 * float(L)))
+    numLat: int = int(float(L) / float(numLon))
+    distanceErrorArray_m: np.ndarray[float] = np.zeros((numLat, numLon))
+    distanceErrorArray_km: np.ndarray[float] = np.zeros((numLat, numLon))
 
-    for j in range(len(truthData)):
+    for j in range(L):
     # for j in range(len(truthData) - 1, len(truthData)):
-        # print(f'True lat/lon = {latLonData[i]}')
         truth_j = truthData[j]
         est_j = estData[j]
         latLon_j = latLonData[j]
@@ -256,42 +255,58 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
         T_i_c = q_est.to_matrix()
         
         i: int = 0
-        tol_angle_arcsec = 1.0
+        tol_angle_arcsec = 0.001
         tol_angle_deg = tol_angle_arcsec / 3600.0
-        while abs(AttitudeError(T_s_g, T_s_g_old)) > tol_angle_deg:
+
+        p_hat_gc: np.ndarray[float] = np.array([0.0, 1.0, 0.0])
+        p_hat_as: np.ndarray[float] = np.array([1.0, 0.0, 0.0])
+        
+        # while abs(np.rad2deg(arccos_safe(np.dot(normalize(p_hat_gc), normalize(p_hat_as))))) > tol_angle_deg:
+        while abs(AttitudeError(T_s_g_old, T_s_g)) > tol_angle_deg:
             i += 1
             T_s_g_old = copy.deepcopy(T_s_g)
             
             T_b_s = T_s_g.T @ T_g_c.T @ T_i_c @ T_i_b.T  # transformation from planet to surface frame
             lat, lon = T_to_latlon(T_b_s.T)
             
-            g = sample_gravity(moon, Cilm, lat, lon, moon.radius, max_degree)
+            altEstimate = SampleDEM_LatLon(dem, lat, lon)
+            g = sampler.SampleAcceleration(lat, lon, moon.radius + 0.001 * altEstimate, maxDegree)
+            # g = sample_gravity(moon, Cilm, lat, lon, moon.radius, max_degree)
             p_hat_gc = T_b_s.T[:, 0]
             # g = -moon.mu * p_hat_gc / ((moon.radius + 0.001 * latLon_j[2]) ** 2)
             p_hat_as = -g / np.linalg.norm(g)
 
-            T_s_g = TwoVectors_to_T(p_hat_as, p_hat_gc)
+            T_s_g = TwoVectors_to_T(p_hat_gc, p_hat_as)
             
-            print(f'Run {i}:')
-            print(f'p_hat_gc = {p_hat_gc}')
-            print(f'p_hat_as = {p_hat_as}')
-            print(f'err = {round(AttitudeError(T_s_g, T_s_g_old) * 3600.0, 1)}"')
-            print(f'lat = {lat} deg')
-            print(f'lon = {lon} deg\n')
+            # print(f'Run {i}:')
+            # print(f'p_hat_gc = {np.round(p_hat_gc, 6)}')
+            # print(f'p_hat_as = {np.round(p_hat_as, 6)}')
+            # print(f'err = {round(deg_to_arcsec(np.rad2deg(arccos_safe(np.dot(normalize(p_hat_gc), normalize(p_hat_as))))), 6)}"')
+            # print(f'lat = {round(lat, 6)} deg')
+            # print(f'lon = {round(lon, 6)} deg\n')
         
         latTruth = float(latLon_j[0])
         lonTruth = float(latLon_j[1])
 
-        print(f'Estimated lat = {lat} deg')
-        print(f'Estimated lon = {lon} deg')
-        print(f'True lat = {latTruth} deg')
-        print(f'True lon = {lonTruth} deg\n')
+        # print(f'Estimated lat = {round(lat, 6)} deg')
+        # print(f'Estimated lon = {round(lon, 6)} deg')
+        # print(f'True lat = {round(latTruth, 6)} deg')
+        # print(f'True lon = {round(lonTruth, 6)} deg\n')
 
-        distanceErr = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
-        distanceErrors_m.append(1000.0 * distanceErr)
-        distanceErrors_km.append(distanceErr)
-        print(f'Distance error = {round(1000.0 * distanceErr, 1)} m\n')
-        # print(f'Distance error = {round(distanceErr, 3)} km\n')
+        distanceErr_km = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
+        distanceErr_m = 1000.0 * distanceErr_km
+        distanceErrors_m.append(distanceErr_m)
+        distanceErrors_km.append(distanceErr_km)
+
+        # Distance errors for plotting
+        latIdx = int(numLat * (latTruth + 90.0) / 180.0)
+        lonIdx = int(numLon * (lonTruth + 180.0) / 360.0)
+        limit_km: float = 10.0
+        distanceErrorArray_m[latIdx, lonIdx] = distanceErr_m if distanceErr_m < 1000.0 * limit_km else 1000.0 * limit_km
+        distanceErrorArray_km[latIdx, lonIdx] = distanceErr_km if distanceErr_km < limit_km else limit_km
+        
+        percentComplete = round(100.0 * float(j) / float(L), 3)
+        print(f'Sample {j}/{L} ({percentComplete} %): Distance error = {round(distanceErr_m, 1)} m')
     
     # Calculate statistics
     mean = np.mean(distanceErrors_m)
@@ -299,9 +314,12 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     std = np.std(distanceErrors_m)
 
     # Print statistics
-    print(f'Mean                        = {round(mean, 1)} m')
-    print(f'Median                      = {round(median, 1)} m')
-    print(f'Standard Deviation          = {round(std, 1)} m')
+    print("")
+    print(f'Mean                    = {round(mean, 1)} m')
+    print(f'Median                  = {round(median, 1)} m')
+    print(f'Standard Deviation      = {round(std, 1)} m')
+    print(f'Minimum                 = {round(min(distanceErrors_m), 3)} m = {round(min(distanceErrors_km), 6)} km')
+    print(f'Maximum                 = {round(max(distanceErrors_m), 3)} m = {round(max(distanceErrors_km), 6)} km')
 
     # Plot histogram and box plot of errors
     fig = plt.figure()
@@ -328,18 +346,18 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     ax2.set_xlabel('Error (m)')
     ax2.grid()
 
+    fig2 = plt.figure()
+    ax3 = fig2.add_subplot(111)
+    plt.sca(ax3)
+
+    plt.imshow(distanceErrorArray_m, cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
+    plt.colorbar(label='Position Error (m)')
+    ax3.set_xlabel("Longitude")
+    ax3.set_ylabel("Latitude")
+    ax3.set_title("Position Estimation Error from Recursive SPS Algorithm")
+
     # Show plot
     plt.show()
-
-
-def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
-    mu = moon.mu
-    R = moon.radius
-    omega = moon.omega
-
-    T = latlon_to_T(lat, lon)
-    g_pcpf = T @ MakeGravGridPoint(Cilm, mu, R, r, lat, lon, max_degree, omega)
-    return g_pcpf
 
 
 if __name__ == "__main__":
@@ -361,6 +379,7 @@ if __name__ == "__main__":
     if n > 2:
         truthSourceDir = sys.argv[2]
     
+    # Latitude, longitude, and altitude
     latLonDataPath = ".\\sampleLatLongs.csv"
     if n > 3:
         latLonDataPath = sys.argv[3]
