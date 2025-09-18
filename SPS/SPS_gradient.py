@@ -127,79 +127,9 @@ def arcsec_to_rad(angle):
     return np.deg2rad(angle / 3600.0)
 
 
-def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRadius: float=6378136.3):
-    truthData = read_csv(truthDataPath)
-    estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
-    
-    # Very basic error handling if datasets are not the same length
-    if len(truthData) != len(estData):
-        return
+def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str):
+    np.set_printoptions(suppress=True)
 
-    # Compare data
-    errorsArcsec = []
-    for i in range(len(truthData)):
-        truth_i = truthData[i]
-        est_i = estData[i]
-        
-        if est_i[0] == 999 or est_i[1] == 999 or est_i[2] == 999 or est_i[3] == 999:
-            continue
-        
-        q_real = Quaternion(truth_i[0], truth_i[1], truth_i[2], truth_i[3]).normalize()
-        q_est = Quaternion(est_i[0], est_i[1], est_i[2], est_i[3]).normalize()
-        q_err = q_est.conjugate().mult(q_real).normalize()
-        m = spice.q2m(q_err.as_w_first_array())
-        phi_d, _ = matrix_to_angleaxis(m)
-        phi_arcsec = deg_to_arcsec(phi_d)
-        
-        if reject != 0 and phi_arcsec > reject:
-            continue
-        errorsArcsec.append(phi_arcsec)
-    
-    # Calculate statistics
-    mean = np.mean(errorsArcsec)
-    median = np.median(errorsArcsec)
-    std = np.std(errorsArcsec)
-    projectedSPSMeanError = arcsec_to_rad(mean) * planetRadius
-
-    # Print statistics
-    print(f'Mean                        = {round(mean, 3)} arcseconds')
-    print(f'Median                      = {round(median, 3)} arcseconds')
-    print(f'Standard Deviation          = {round(std, 3)} arcseconds')
-    print(f'Projected SPS Mean Error    = {round(projectedSPSMeanError, 1)} meters')
-
-    # Plot histogram and box plot of errors
-    fig = plt.figure()
-    ax1 = fig.add_subplot(211)
-    ax2 = fig.add_subplot(212)
-    ax1.hist(errorsArcsec, bins=200, color='skyblue', edgecolor='black')
-    mpl_v = matplotlib.__version__.split(".")
-    mpl_v_maj = float(mpl_v[0])
-    mpl_v_min = float(mpl_v[1])
-    # mpl_v_patch = float(mpl_v[2])
-
-    # If matplotlib version is too low, the "orientation" kwarg is invalid. Need to use "vert: bool" for matplotlib < 3.10
-    if mpl_v_maj < 3 or mpl_v_min < 10:
-        ax2.boxplot(errorsArcsec, vert=False, showfliers=False)
-    else:
-        ax2.boxplot(errorsArcsec, orientation='horizontal', showfliers=False)
-
-    # Nice plot stuff
-    extraPrint = f' (errors > {reject} arcseconds rejected)'
-    if reject == 0:
-        extraPrint = f' (no errors rejected)'
-    ax1.set_title(f'Attitude Error Counts for {len(errorsArcsec)}/{len(truthData)} Samples' + extraPrint)
-    ax1.set_xlabel('Error (arcseconds)')
-    ax1.set_ylabel('Count')
-    ax1.grid()
-    ax2.set_title(f'Attitude Error Statistics for {len(errorsArcsec)}/{len(truthData)} Samples' + extraPrint)
-    ax2.set_xlabel('Error (arcseconds)')
-    ax2.grid()
-
-    # Show plot
-    plt.show()
-
-
-def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str):    
     # Transformation from inertial to planet frame
     home = ".\\py_src\\star\\"
     spice.furnsh(home + "data\\metakernel.txt")
@@ -229,9 +159,12 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
     numLat: int = int(float(L) / float(numLon))
     distanceErrorArray_m: np.ndarray[float] = np.zeros((numLat, numLon))
     distanceErrorArray_km: np.ndarray[float] = np.zeros((numLat, numLon))
+    limit_km: float = 1.0
+
+    # Gravity gradient grid:
+    Gxx, Gyy, Gzz, Gxy, Gxz, Gyz = sampler.GetGradientGrid(maxDegree)
 
     for j in range(L):
-    # for j in range(len(truthData) - 1, len(truthData)):
         truth_j = truthData[j]
         est_j = estData[j]
         latLon_j = latLonData[j]
@@ -242,48 +175,71 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
         q_real = Quaternion(truth_j[0], truth_j[1], truth_j[2], truth_j[3]).normalize()
         q_est = Quaternion(est_j[0], est_j[1], est_j[2], est_j[3]).normalize()
         
-        lat = 0.0 
-        lon = 0.0
-        
+        T_i_c = q_est.to_matrix()
         T_g_c = np.identity(3)  # transformation from gravity to camera frame
 
-        # print(f'T_i_b = {T_i_b}')
+        Omega = np.array([0.0, 0.0, moon.omega])
+        g_sensorFrame: np.ndarray[float] = np.array([-moon.mu / (moon.radius ** 2), 0.0, 0.0])
+        # print(f'g_sensorFrame = {g_sensorFrame}')
+        r_hat_i = -(moon.radius ** 3 / moon.mu) * (T_i_b @ T_i_c.T @ T_g_c @ g_sensorFrame)
+        r_hat_i = -(moon.radius ** 3 / moon.mu) * (T_i_b @ T_i_c.T @ T_g_c @ g_sensorFrame + 
+                                                   np.cross(Omega, np.cross(Omega, r_hat_i)))
         
-        T_s_g = np.identity(3)  # transformation from surface to gravity frame
-        T_s_g_old = T_angle_axis(np.deg2rad(1.0), np.array([0, 0, 1]))
-        
-        T_i_c = q_est.to_matrix()
-        
+        # print(f'r_hat_i = {r_hat_i}')
+
+        r_hat_i_plus_1 = copy.deepcopy(r_hat_i)
+        r_hat_i = np.zeros(3)
+
+        lat, lon, _ = r_to_latlonalt(r_hat_i_plus_1, moon.radius)
+        alt = SampleDEM_LatLon(dem, lat, lon)
+        # print(f'lat = {lat}')
+        # print(f'lon = {lon}')
+        # print(f'alt = {alt}')
+
+        # Gradient method:
         i: int = 0
-        tol_angle_arcsec = 0.001
-        tol_angle_deg = tol_angle_arcsec / 3600.0
 
-        p_hat_gc: np.ndarray[float] = np.array([0.0, 1.0, 0.0])
-        p_hat_as: np.ndarray[float] = np.array([1.0, 0.0, 0.0])
-        
-        # while abs(np.rad2deg(arccos_safe(np.dot(normalize(p_hat_gc), normalize(p_hat_as))))) > tol_angle_deg:
-        while abs(AttitudeError(T_s_g_old, T_s_g)) > tol_angle_deg:
+        tol: float = 10.0  # m
+        dr: np.ndarray[float] = np.zeros(3)
+        dr_prev: np.ndarray[float] = 2.0 * tol * np.ones(3)
+
+        # Tolerance: 10 m?
+        while np.linalg.norm(dr - dr_prev) > tol:
             i += 1
-            T_s_g_old = copy.deepcopy(T_s_g)
+            r_hat_i = copy.deepcopy(r_hat_i_plus_1)
+            dr_prev = copy.deepcopy(dr)
             
-            T_b_s = T_s_g.T @ T_g_c.T @ T_i_c @ T_i_b.T  # transformation from planet to surface frame
-            lat, lon = T_to_latlon(T_b_s.T)
-            
-            altEstimate = SampleDEM_LatLon(dem, lat, lon)
-            g = sampler.SampleAcceleration(lat, lon, moon.radius + 0.001 * altEstimate, maxDegree)
-            # g = sample_gravity(moon, Cilm, lat, lon, moon.radius, max_degree)
-            p_hat_gc = T_b_s.T[:, 0]
-            # g = -moon.mu * p_hat_gc / ((moon.radius + 0.001 * latLon_j[2]) ** 2)
-            p_hat_as = -normalize(g)
+            # Gravitational acceleration:
+            g = sampler.SampleAcceleration(lat, lon, moon.radius + alt, maxDegree)
 
-            T_s_g = TwoVectors_to_T(p_hat_gc, p_hat_as)
+            # Gradient
+            # dXYZ: float = 5000.0  # m
+            # G: np.ndarray[float] = sampler.SampleGradient(lat, lon, moon.radius + alt, maxDegree, dXYZ)
+            G = sampler.InterpolateGradientGrid(lat, lon, Gxx, Gyy, Gzz, Gxy, Gxz, Gyz)
+            G_inv = np.linalg.inv(G)
+
+            g_sensorFrame: np.ndarray[float] = np.array([-moon.mu / ((moon.radius + alt) ** 2), 0.0, 0.0])
+            g_est = T_i_b @ T_i_c.T @ T_g_c @ g_sensorFrame + np.cross(Omega, np.cross(Omega, r_hat_i))
+            dg = g - g_est
+
+            # print(f'alt = {alt}')
+            # print(f'g = {g}')
+            # print(f'g_est = {g_est}')
             
-            # print(f'Run {i}:')
-            # print(f'p_hat_gc = {np.round(p_hat_gc, 6)}')
-            # print(f'p_hat_as = {np.round(p_hat_as, 6)}')
-            # print(f'err = {round(deg_to_arcsec(np.rad2deg(arccos_safe(np.dot(normalize(p_hat_gc), normalize(p_hat_as))))), 6)}"')
-            # print(f'lat = {round(lat, 6)} deg')
-            # print(f'lon = {round(lon, 6)} deg\n')
+            dr = G_inv @ dg
+            r_hat_i_plus_1 = r_hat_i - 0.15 * dr
+
+            lat, lon, _ = r_to_latlonalt(r_hat_i_plus_1, moon.radius)
+            alt = SampleDEM_LatLon(dem, lat, lon)
+            
+            if i > 100:
+                # print(f'    Run {i} lat = {round(lat, 6)}, lon = {round(lon, 6)} deg')
+                print(f'    Run {i} dr = {np.round(dr, 3)} m')
+                # print(f'p_hat_gc = {np.round(p_hat_gc, 6)}')
+                # print(f'p_hat_as = {np.round(p_hat_as, 6)}')
+                # print(f'err = {round(deg_to_arcsec(np.rad2deg(arccos_safe(np.dot(normalize(p_hat_gc), normalize(p_hat_as))))), 6)}"')
+                # print(f'lat = {round(lat, 6)} deg')
+                # print(f'lon = {round(lon, 6)} deg\n')
         
         latTruth = float(latLon_j[0])
         lonTruth = float(latLon_j[1])
@@ -293,20 +249,22 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
         # print(f'True lat = {round(latTruth, 6)} deg')
         # print(f'True lon = {round(lonTruth, 6)} deg\n')
 
-        distanceErr_km = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
-        distanceErr_m = 1000.0 * distanceErr_km
-        distanceErrors_m.append(distanceErr_m)
-        distanceErrors_km.append(distanceErr_km)
+        distanceErr_m = archaversine(moon.radius, np.deg2rad(latTruth), np.deg2rad(lat), np.deg2rad(lonTruth), np.deg2rad(lon))
+        distanceErr_km = 0.001 * distanceErr_m
+
+        if distanceErr_km < limit_km:
+            distanceErrors_m.append(distanceErr_m)
+            distanceErrors_km.append(distanceErr_km)
 
         # Distance errors for plotting
         latIdx = int(numLat * (90.0 - latTruth) / 180.0)
         lonIdx = int(numLon * (lonTruth + 180.0) / 360.0)
-        limit_km: float = 10.0
         distanceErrorArray_m[latIdx, lonIdx] = distanceErr_m if distanceErr_m < 1000.0 * limit_km else 1000.0 * limit_km
         distanceErrorArray_km[latIdx, lonIdx] = distanceErr_km if distanceErr_km < limit_km else limit_km
         
         percentComplete = round(100.0 * float(j) / float(L), 3)
-        print(f'Sample {j}/{L} ({percentComplete} %): Distance error = {round(distanceErr_m, 1)} m')
+        if j % 100 == 0:
+            print(f'Sample {j}/{L} after {i} iterations ({percentComplete} %): Distance error = {round(distanceErr_m, 1)} m')
     
     # Calculate statistics
     mean = np.mean(distanceErrors_m)
@@ -338,11 +296,14 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
         ax2.boxplot(distanceErrors_m, orientation='horizontal', showfliers=False)
 
     # Nice plot stuff
-    ax1.set_title(f'Position Error Counts for {len(distanceErrors_m)}/{len(truthData)} Samples')
+    extraPrint = f' (errors > {limit_km} km rejected)'
+    if len(distanceErrors_m) == len(truthData):
+        extraPrint = f' (no errors rejected)'
+    ax1.set_title(f'Position Error Counts for {len(distanceErrors_m)}/{len(truthData)} Samples' + extraPrint)
     ax1.set_xlabel('Error (m)')
     ax1.set_ylabel('Count')
     ax1.grid()
-    ax2.set_title(f'Position Error Statistics for {len(distanceErrors_m)}/{len(truthData)} Samples')
+    ax2.set_title(f'Position Error Statistics for {len(distanceErrors_m)}/{len(truthData)} Samples' + extraPrint)
     ax2.set_xlabel('Error (m)')
     ax2.grid()
 

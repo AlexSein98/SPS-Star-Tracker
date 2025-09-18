@@ -47,7 +47,7 @@ Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
 
 
 Image.MAX_IMAGE_PIXELS = None
-moonDEM = ".\\data\\ldem_64.tif"
+moonDEM = "./data/ldem_64.tif"
 
 
 def ReadDEM(path: str) -> np.ndarray[float]:
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     lons = []
     alts = []
     for i in range(numLat):
-        lat = (i + 1) * 180.0 * invNumLat - 90.0
+        lat = 90.0 - (i + 1) * 180.0 * invNumLat
         latIdx = (i + 1) * countLat * invNumLat
         lats.append([])
         lons.append([])

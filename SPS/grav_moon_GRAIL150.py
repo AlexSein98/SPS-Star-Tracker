@@ -15,10 +15,11 @@ class grav_moon_GRAIL150:
     def __init__(self):
         self.maxDegree = 150
         self.maxOrder = 150
-        self.mu = 4902.79980693169
-        self.mass = self.mu / UniversalConstants.G
+        self.mu = 4902.79980693169e9
+        self.mass = self.mu / (UniversalConstants.G * 1e9)
         self.omega = 2.66e-6
-        self.radius = 1737.4
+        self.radius = 1737400.0
+        self.flattening = 0.0
 
         Clm = np.zeros((self.maxDegree + 1, self.maxOrder + 1))
         Slm = np.zeros((self.maxDegree + 1, self.maxOrder + 1))

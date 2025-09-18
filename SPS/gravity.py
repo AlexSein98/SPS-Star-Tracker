@@ -3,7 +3,7 @@ from py_src.star.python.transformations import *
 
 import pyshtools as sh
 import pyshtools.gravmag as grav
-from pyshtools.gravmag import MakeGravGridPoint
+from pyshtools.gravmag import MakeGravGridPoint, MakeGravGradGridDH
 
 
 class LatLonAlt:
@@ -34,10 +34,10 @@ class GravSampler:
         self.Cilm = np.dstack((moon.Clm[:maxDegree+1, :maxOrder+1], moon.Slm[:maxDegree+1, :maxOrder+1])).transpose((2, 0, 1))
         self.Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
     
-    """
-    Latitude and longitude must be in degrees!
-    """
     def SampleAcceleration(self, lat: float, lon: float, r: float, maxDegree: float) -> np.ndarray[float]:
+        """
+        Latitude and longitude must be in degrees!
+        """
         mu = moon.mu
         R = moon.radius
         omega = moon.omega
@@ -46,10 +46,10 @@ class GravSampler:
         g_pcpf = T @ MakeGravGridPoint(self.Cilm, mu, R, r, lat, lon, maxDegree, omega)
         return g_pcpf
     
-    """
-    Latitude and longitude must be in degrees! dXYZ must be in the same units as R.
-    """
     def DeltaXYZ_to_DeltaLatLon(self, lla: LatLonAlt, R: float, dXYZ: float) -> DeltaLatLon:
+        """
+        Latitude and longitude must be in degrees! dXYZ must be in the same units as R.
+        """
         lat = lla.lat
         lon = lla.lon
         alt = lla.alt
@@ -64,12 +64,12 @@ class GravSampler:
         rMinusZ = r - np.array([0.0, 0.0, dXYZ])
 
         # Convert back to lat lon alt
-        latPlusX, lonPlusX, altPlusX = r_to_latlonalt(rPlusX)
-        latMinusX, lonMinusX, altMinusX = r_to_latlonalt(rMinusX)
-        latPlusY, lonPlusY, altPlusY = r_to_latlonalt(rPlusY)
-        latMinusY, lonMinusY, altMinusY = r_to_latlonalt(rMinusY)
-        latPlusZ, lonPlusZ, altPlusZ = r_to_latlonalt(rPlusZ)
-        latMinusZ, lonMinusZ, altMinusZ = r_to_latlonalt(rMinusZ)
+        latPlusX, lonPlusX, altPlusX = r_to_latlonalt(rPlusX, moon.radius)
+        latMinusX, lonMinusX, altMinusX = r_to_latlonalt(rMinusX, moon.radius)
+        latPlusY, lonPlusY, altPlusY = r_to_latlonalt(rPlusY, moon.radius)
+        latMinusY, lonMinusY, altMinusY = r_to_latlonalt(rMinusY, moon.radius)
+        latPlusZ, lonPlusZ, altPlusZ = r_to_latlonalt(rPlusZ, moon.radius)
+        latMinusZ, lonMinusZ, altMinusZ = r_to_latlonalt(rMinusZ, moon.radius)
 
         # LatLonAlt structs
         llaPlusX = LatLonAlt(latPlusX, lonPlusX, altPlusX)
@@ -81,10 +81,10 @@ class GravSampler:
 
         return DeltaLatLon(lla, llaPlusX, llaMinusX, llaPlusY, llaMinusY, llaPlusZ, llaMinusZ)
     
-    """
-    Latitude and longitude must be in degrees! dXYZ must be in the same units as r.
-    """
-    def SampleGradient(self, lat: float, lon: float, r: float, maxDegree: float, dXYZ: float) -> np.ndarray[float]:
+    def SampleGradient_Numerical(self, lat: float, lon: float, r: float, maxDegree: float, dXYZ: float) -> np.ndarray[float]:
+        """
+        Latitude and longitude must be in degrees! dXYZ must be in the same units as r.
+        """
         # The gradient matrix is of form: 
         #   | dg/dx[0], dg/dy[0], dg/dz[0] |
         #   | dg/dx[1], dg/dy[1], dg/dz[1] |
@@ -113,3 +113,49 @@ class GravSampler:
         dg_dz: np.ndarray[float] = 0.5 * dXYZ_inv * (dg_dz_plus - dg_dz_minus)
 
         return np.array([dg_dx, dg_dy, dg_dz]).T
+    
+    def GetGradientGrid(self, maxDegree: float) -> np.ndarray[float]:
+        mu = moon.mu
+        R = moon.radius
+        f = moon.flattening
+
+        Gxx, Gyy, Gzz, Gxy, Gxz, Gyz = \
+            MakeGravGradGridDH(self.Cilm, mu, R, lmax=maxDegree, a=R, f=f, sampling=2, lmax_calc=maxDegree, extend=True)
+        return Gxx, Gyy, Gzz, Gxy, Gxz, Gyz
+    
+    def InterpolateGrid(self, grid: np.ndarray[float], _i_minus: int, _i_plus: int, _j_minus: int, _j_plus: int) -> float:
+        """
+        Internal use only!
+        """
+        sample_i_minus_j_minus = grid[_i_minus, _j_minus]
+        sample_i_plus_j_minus = grid[_i_plus, _j_minus]
+        sample_i_minus_j_plus = grid[_i_minus, _j_plus]
+        sample_i_plus_j_plus = grid[_i_plus, _j_plus]
+        return 0.25 * (sample_i_minus_j_minus + sample_i_plus_j_minus + sample_i_minus_j_plus + sample_i_plus_j_plus)
+    
+    def InterpolateGradientGrid(self, lat: float, lon: float, Gxx: np.ndarray[float], 
+                                Gyy: np.ndarray[float], Gzz: np.ndarray[float], 
+                                Gxy: np.ndarray[float], Gxz: np.ndarray[float], 
+                                Gyz: np.ndarray[float]) -> np.ndarray[float]:
+        countLat = Gxx.shape[0]
+        countLon = Gxx.shape[1]
+        _i = countLat * (90.0 - lat) / 180.0
+        _j = countLon * (lon) / 360.0
+
+        _i_minus: int = int(np.floor(_i))
+        _i_plus: int = int((_i_minus + 1) % countLat)
+        _j_minus: int = int(np.floor(_j))
+        _j_plus: int = int((_j_minus + 1) % countLon)
+        
+        Gxx_ij = self.InterpolateGrid(Gxx, _i_minus, _i_plus, _j_minus, _j_plus)
+        Gyy_ij = self.InterpolateGrid(Gyy, _i_minus, _i_plus, _j_minus, _j_plus)
+        Gzz_ij = self.InterpolateGrid(Gzz, _i_minus, _i_plus, _j_minus, _j_plus)
+        Gxy_ij = self.InterpolateGrid(Gxy, _i_minus, _i_plus, _j_minus, _j_plus)
+        Gxz_ij = self.InterpolateGrid(Gxz, _i_minus, _i_plus, _j_minus, _j_plus)
+        Gyz_ij = self.InterpolateGrid(Gyz, _i_minus, _i_plus, _j_minus, _j_plus)
+        
+        T: np.ndarray[float] = latlon_to_T(lat, lon)
+        G_ij = np.array([[Gzz_ij, Gxz_ij, Gyz_ij], 
+                         [Gxz_ij, Gxx_ij, Gxy_ij], 
+                         [Gyz_ij, Gxy_ij, Gyy_ij]])
+        return T @ G_ij @ T.T

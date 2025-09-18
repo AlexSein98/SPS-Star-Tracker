@@ -119,10 +119,10 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
         # Add to plotting array even if it's
         latTruth = float(latLon_i[0])
         lonTruth = float(latLon_i[1])
-        latIdx = int(numLat * (latTruth + 90.0) / 180.0)
+        latIdx = int(numLat * (90.0 - latTruth) / 180.0)
         lonIdx = int(numLon * (lonTruth + 180.0) / 360.0)
         errorsArcsecArray[latIdx, lonIdx] = phi_arcsec if phi_arcsec < reject else reject
-        
+
         if reject != 0 and phi_arcsec > reject:
             continue
         errorsArcsec.append(phi_arcsec)

@@ -51,7 +51,7 @@ def r_hat_to_latlon(r_hat: np.ndarray[float]):
     return lat, lon
 
 
-def r_to_latlonalt(r: np.ndarray[float], R: float):
+def r_to_latlonalt(r: np.ndarray[float], R: float) -> tuple[float, float, float]:
     r_hat = normalize(r)
     lat = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
     lon = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
