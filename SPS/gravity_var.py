@@ -17,15 +17,17 @@ import pyshtools as sh
 import pyshtools.gravmag as grav
 from pyshtools.gravmag import MakeGravGridPoint
 
+from SPS.gravity import *
 
-def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
-  mu = moon.mu
-  R = moon.radius
-  omega = moon.omega
 
-  T = latlon_to_T(lat, lon)
-  g_pcpf = T @ MakeGravGridPoint(Cilm, mu, R, r, lat, lon, max_degree, omega)
-  return normalize(g_pcpf)
+# def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
+#   mu = moon.mu
+#   R = moon.radius
+#   omega = moon.omega
+
+#   T = latlon_to_T(lat, lon)
+#   g_pcpf = T @ MakeGravGridPoint(Cilm, mu, R, r, lat, lon, max_degree, omega)
+#   return normalize(g_pcpf)
 
 
 
@@ -39,10 +41,10 @@ def angle_between_gravities(real_grav, sphere_grav):
 # Set variables necessary for sample_gravity function
 moon = grav_moon_GRAIL150()
 
-max_degree = 128
-max_order = 128
-Cilm = np.dstack((moon.Clm[:max_degree + 1, :max_order + 1], moon.Slm[:max_degree + 1, :max_order + 1])).transpose((2, 0, 1))
-Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
+# max_degree = 128
+# max_order = 128
+# Cilm = np.dstack((moon.Clm[:max_degree + 1, :max_order + 1], moon.Slm[:max_degree + 1, :max_order + 1])).transpose((2, 0, 1))
+# Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
 
 
 
@@ -69,6 +71,11 @@ def SampleDEM(dem: np.ndarray[float], _i: float, _j: float):
 
 
 if __name__ == "__main__":
+    home = "./py_src/star/"
+    spice.furnsh(home + "data/metakernel.txt")
+    tNow = '2025 July 4, 00:00:00 UTC'
+    etNow = spice.str2et(tNow)
+
     rEarth = 6378136.3
     rMoon = 1737400.0
     rMars = 3396190.0
@@ -103,12 +110,16 @@ if __name__ == "__main__":
             lons[i].append(lon)
             alts[i].append(altitude_m)
 
-    angle_matrix = []
+    angle_matrix: list[list[float]] = []
+    maxDegree: int = 128
+    maxOrder: int = 128
+    sampler = GravSampler(maxDegree, maxOrder)
+
     for i in range(len(lats)):
       angle_matrix.append([])
       for j in range(len(lats[i])):
         sphere_grav = -normalize(latlon_to_T(lats[i][j], lons[i][j]).T[0])
-        true_grav = sample_gravity(moon,Cilm, lats[i][j], lons[i][j], moon.radius, max_degree)
+        true_grav = sampler.SampleAcceleration(lats[i][j], lons[i][j], moon.radius, maxDegree, True, etNow)
         _angle = angle_between_gravities(true_grav, sphere_grav)
         angle_matrix[i].append(_angle)
 

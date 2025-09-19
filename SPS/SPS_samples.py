@@ -76,17 +76,17 @@ if __name__ == "__main__":
             lons[i].append(lon)
             alts[i].append(altitude_m)
     
-    with open(".\\sampleLatLongs.csv", "w") as samples:
-        writer = csv.writer(samples, delimiter=",", quotechar="|", lineterminator="\n")
-        for i in range(len(alts)):
-            for j in range(len(alts[0])):
-                writer.writerow([lats[i][j], lons[i][j], alts[i][j]])
+    # with open(".\\sampleLatLongs.csv", "w") as samples:
+    #     writer = csv.writer(samples, delimiter=",", quotechar="|", lineterminator="\n")
+    #     for i in range(len(alts)):
+    #         for j in range(len(alts[0])):
+    #             writer.writerow([lats[i][j], lons[i][j], alts[i][j]])
     
     # Visualize:
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
-    plt.imshow(alts, cmap='viridis', aspect='equal')
+    plt.imshow(alts, cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
     plt.colorbar(label='Altitude (m)')
 
     plt.show()

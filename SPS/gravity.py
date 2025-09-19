@@ -5,6 +5,8 @@ import pyshtools as sh
 import pyshtools.gravmag as grav
 from pyshtools.gravmag import MakeGravGridPoint, MakeGravGradGridDH
 
+import spiceypy as spice
+
 
 class LatLonAlt:
     def __init__(self, lat: float, lon: float, alt: float):
@@ -34,7 +36,8 @@ class GravSampler:
         self.Cilm = np.dstack((moon.Clm[:maxDegree+1, :maxOrder+1], moon.Slm[:maxDegree+1, :maxOrder+1])).transpose((2, 0, 1))
         self.Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
     
-    def SampleAcceleration(self, lat: float, lon: float, r: float, maxDegree: float) -> np.ndarray[float]:
+    def SampleAcceleration(self, lat: float, lon: float, r: float, maxDegree: float, 
+                           includeThirdBody: bool = False, et: float = 0.0) -> np.ndarray[float]:
         """
         Latitude and longitude must be in degrees!
         """
@@ -43,7 +46,27 @@ class GravSampler:
         omega = moon.omega
 
         T = latlon_to_T(lat, lon)
+        pos_surface = r * T[:, 0]
         g_pcpf = T @ MakeGravGridPoint(self.Cilm, mu, R, r, lat, lon, maxDegree, omega)
+
+        # Third-body perturbations:
+        if not includeThirdBody:
+            return g_pcpf
+
+        # g_pcpf = -moon.mu * pos_surface / (r ** 3)  # Override spherical harmonics with just spherical gravity
+        planetIDs = [10, 199, 299, 399, 499, 599, 699, 799, 899]  # no Pluto hehe >:)
+        T_moon = spice.pxform("J2000", "MOON_PA", et)
+        for id in planetIDs:
+            # Assume SPICE has been furnsh'd
+            name: str = spice.bodc2n(id)
+            pos_km, _ = spice.spkpos(name, et, "J2000", "NONE", "MOON")
+            pos_m = 1000.0 * pos_km
+
+            muResult = spice.bodvrd(name, "GM", 1)
+            mu: float = muResult[1][0]
+            r_sat_body: np.ndarray[float] = pos_m - T_moon.T @ pos_surface
+            g_inertial = mu * (r_sat_body / (np.linalg.norm(r_sat_body) ** 3) - pos_m / (np.linalg.norm(pos_m) ** 3))
+            g_pcpf += T_moon @ g_inertial
         return g_pcpf
     
     def DeltaXYZ_to_DeltaLatLon(self, lla: LatLonAlt, R: float, dXYZ: float) -> DeltaLatLon:
