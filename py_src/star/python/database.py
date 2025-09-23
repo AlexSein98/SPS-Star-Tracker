@@ -38,7 +38,7 @@ def generate_database_unique(catalogPath, magnitudeCutoff):
     
     # Sort and save database
     database_sorted = sorted(database, key=lambda x: x[4])
-    with open(".\\py_src\\star\\data\\database.csv", "w") as databaseCSV:
+    with open("./py_src/star/data/database.csv", "w") as databaseCSV:
         writer = csv.writer(databaseCSV, delimiter=',', quotechar='"', lineterminator='\n')
         for line in database_sorted:
             writer.writerow(line)
@@ -70,4 +70,4 @@ def read_database(databasePath):
 #########################################################################
 
 if __name__ == "__main__":
-    generate_database_unique(".\\py_src\\star\\data\\catalog.csv", 3.0)
+    generate_database_unique("./py_src/star/data/catalog.csv", 3.0)

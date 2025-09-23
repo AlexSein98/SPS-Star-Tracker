@@ -288,12 +288,12 @@ def get_sphere_lighting(normal: np.ndarray[float], normal_SunPlanet: np.ndarray[
 
 # Initialize planet textures
 for planetName in allPlanets:
-    home = ".\\"
+    home = "./"
     if len(sys.argv) > 1:
         home = sys.argv[1]
     
     print(f'Reading texture for planet {planetName}...')
-    tex = cv2.imread(home + "py_src\\star\\data\\textures\\" + planetName + ".jpg")
+    tex = cv2.imread(home + "py_src/star/data/textures/" + planetName + ".jpg")
     planetTextures[planetName] = tex
 
 print('Done initializing planet textures!')

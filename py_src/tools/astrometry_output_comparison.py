@@ -108,12 +108,12 @@ r=1
 
 for st_name in file1_soln_names:
     the_name = st_name.split('/')
-    st_comp_name = the_name[-1].split('\\')[-1]
+    st_comp_name = the_name[-1].split('/')[-1]
 
     for astro_name in file2_soln_names:
 
             the_name = astro_name.split('/')
-            astro_comp_name = the_name[-1].split('\\')[-1]
+            astro_comp_name = the_name[-1].split('/')[-1]
 
             if st_comp_name == astro_comp_name:
 

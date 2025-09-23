@@ -37,7 +37,7 @@ def arc_to_degrees(angleInArcTime: str):
 
 # Source: https://tannerhelland.com/2012/09/18/convert-temperature-rgb-algorithm-code.html
 # Temperature 'temp' must be in Kelvin
-def temp_to_rgb(temp: float) -> tuple[int]:
+def temp_to_rgb(temp: float) -> tuple[int, int, int]:
     temp_100 = 0.01 * temp
     r: float = 0
     g: float = 0
@@ -122,9 +122,9 @@ def read_json_catalog(catalogPath: str):
         return catalog
 
 
-def export_json_catalog_to_csv(catalogPath: str, home: str=".\\py_src\\star\\"):
+def export_json_catalog_to_csv(catalogPath: str, home: str="./py_src/star/"):
     catalog = read_json_catalog(catalogPath)
-    with open(home + "data\\catalog.csv", "w") as catalogCSV:
+    with open(home + "data/catalog.csv", "w") as catalogCSV:
         writer = csv.writer(catalogCSV, delimiter=',', quotechar='"', lineterminator='\n')
         for line in catalog:
             writer.writerow(line)
@@ -156,17 +156,17 @@ def subset_catalog_by_magnitude(catalog, magnitudeCutoff: float):
 
 
 if __name__ == "__main__":
-    home: str = ".\\py_src\\star\\"
+    home: str = "./py_src/star/"
     if len(sys.argv) > 1:
         home = sys.argv[1]
     
     # TEST 1: READ ORIGINAL (JSON) BRIGHT STAR CATALOG (BSC)
-    # read_json_catalog(home + "data\\bsc5-all.json")
+    # read_json_catalog(home + "data/bsc5-all.json")
 
     # TEST 2: CONVERT ORIGINAL BSC TO CSV
-    export_json_catalog_to_csv(home + "data\\bsc5-all.json", home)
+    export_json_catalog_to_csv(home + "data/bsc5-all.json", home)
 
     # TEST 3: READ CSV VERSION OF BSC CATALOG AND PRINT
-    # catalog = read_csv_catalog(home + "data\\catalog.csv")
+    # catalog = read_csv_catalog(home + "data/catalog.csv")
     # print(catalog)
     pass

@@ -203,8 +203,8 @@ def plot_errors(truthDataPath: str, estDataPath: str, reject: float=0, planetRad
 
 def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str):    
     # Transformation from inertial to planet frame
-    home = ".\\py_src\\star\\"
-    spice.furnsh(home + "data\\metakernel.txt")
+    home = "./py_src/star/"
+    spice.furnsh(home + "data/metakernel.txt")
     tNow = '2025 July 4, 00:00:00 UTC'
     etNow = spice.str2et(tNow)
     T_i_b = spice.pxform("J2000", "MOON_PA", etNow)
@@ -352,16 +352,16 @@ if __name__ == "__main__":
 
     # Star tracker "measurements" file
     n = len(sys.argv)
-    measurements = ".\\output.csv"
+    measurements = "./output.csv"
     if n > 1:
         measurements = sys.argv[1]
     
     # Truth source directory
-    truthSourceDir = ".\\py_src\\star\\"
+    truthSourceDir = "./py_src/star/"
     if n > 2:
         truthSourceDir = sys.argv[2]
     
-    latLonDataPath = ".\\sampleLatLongs.csv"
+    latLonDataPath = "./sampleLatLongs.csv"
     if n > 3:
         latLonDataPath = sys.argv[3]
     

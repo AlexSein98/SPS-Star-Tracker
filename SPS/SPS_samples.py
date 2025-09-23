@@ -10,7 +10,7 @@ from py_src.star.python.transformations import *
 os.system('cls')
 
 Image.MAX_IMAGE_PIXELS = None
-moonDEM = ".\\data\\ldem_64.tif"
+moonDEM = "./data/ldem_64.tif"
 
 
 def ReadDEM(path: str) -> np.ndarray[float]:
@@ -68,7 +68,7 @@ if __name__ == "__main__":
             lons[i].append(lon)
             alts[i].append(altitude_m)
     
-    with open(".\\sampleLatLongs.csv", "w") as samples:
+    with open("./sampleLatLongs.csv", "w") as samples:
         writer = csv.writer(samples, delimiter=",", quotechar="|", lineterminator="\n")
         for i in range(len(alts)):
             for j in range(len(alts[0])):

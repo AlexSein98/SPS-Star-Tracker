@@ -12,7 +12,7 @@ def clamp(val, low, high):
     return low if val < low else high if val > high else val
 
 
-def temp_to_rgb(temp: float) -> tuple[int]:
+def temp_to_rgb(temp: float) -> tuple[int, int, int]:
     temp_100 = 0.01 * temp
     r: float = 0
     g: float = 0

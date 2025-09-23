@@ -14,24 +14,24 @@ if __name__ == "__main__":
 
     # Process arguments
     n = len(sys.argv)
-    home = ".\\py_src\\star\\"
+    home = "./py_src/star/"
     if n > 1:
         home = sys.argv[1]
 
     # Delete all old images
     delete_old = True
     if delete_old:
-        dir_path = home + "python\\output"
+        dir_path = home + "python/output"
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
         os.mkdir(os.path.join(home + "python", "output"))
 
     # Get full star catalog
-    catalog = read_csv_catalog(home + "data\\catalog.csv")
+    catalog = read_csv_catalog(home + "data/catalog.csv")
 
     # Get lat/lon/alt locations
     latLonAlts = []
-    with open(".\\sampleLatLongs.csv", "r") as sampleLatLongs:
+    with open("./sampleLatLongs.csv", "r") as sampleLatLongs:
         reader = csv.reader(sampleLatLongs, delimiter=",", quotechar="|", lineterminator="\n")
         for line in reader:
             latLonAlts.append([float(line[0]), float(line[1]), float(line[2])])
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     starMaxPixelRadius = 16
 
     # Astrophysical parameters
-    spice.furnsh(home + "data\\metakernel.txt")
+    spice.furnsh(home + "data/metakernel.txt")
     tJ2000 = '2000 Jan 1, 00:00:00 UTC'
     tNow = '2025 July 4, 00:00:00 UTC'
     etJ2000 = spice.str2et(tJ2000)

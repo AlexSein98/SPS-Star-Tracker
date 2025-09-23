@@ -59,17 +59,17 @@ graphics = False # set True for graphics throughout the solve process
 np.set_printoptions(suppress=True)
 
 n = len(sys.argv)
-home = ".\\"
+home = "./"
 if n > 1:
     home = sys.argv[1]   
 
-imgSourceDir = home + "py_src\\star\\python\\output"
+imgSourceDir = home + "py_src/star/python/output"
 if n > 2:
     imgSourceDir = sys.argv[2]
 
 data_path = home + 'data' # full path to your data
-cam_config_file_path = home + 'data\\cam_config\\Custom_cam.json' # full path (including filename) of your cam config file
-darkframe_file_path = home + 'Images\\darkframes\\darkframe.png' # full path (including filename) of your darkframe file
+cam_config_file_path = home + 'data/cam_config/Custom_cam.json' # full path (including filename) of your cam config file
+darkframe_file_path = home + 'Images/darkframes/darkframe.png' # full path (including filename) of your darkframe file
 image_extension = ".png" # the image extension to search for in the data_path directory
 cat_prefix ='' # if the catalog has a prefix, define it here
 
@@ -120,7 +120,7 @@ total_start = time.time()
 
 dir_contents = os.listdir(imgSourceDir)
 for i in range(len(dir_contents)):
-     dir_contents[i] = imgSourceDir + "\\" + dir_contents[i]
+     dir_contents[i] = imgSourceDir + "/" + dir_contents[i]
      print(f'dir_contents[{i}] = {dir_contents[i]}')
 dir_contents.sort(key=os.path.getctime)
 

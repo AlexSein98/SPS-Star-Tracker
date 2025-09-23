@@ -245,7 +245,7 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
 
     # Save image
     img = cv2.cvtColor(np.clip(img_array, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-    destination = home_dir + 'python\\output\\StarRender_ra_' + str(round(ra, 3)) + '_de_' + str(round(de, 3)) + '.png'
+    destination = home_dir + 'python/output/StarRender_ra_' + str(round(ra, 3)) + '_de_' + str(round(de, 3)) + '.png'
     cv2.imwrite(destination, img)
 
 
@@ -266,14 +266,14 @@ if __name__ == "__main__":
 
     # Process arguments
     n = len(sys.argv)
-    home = ".\\py_src\\star\\"
+    home = "./py_src/star"
     if n > 1:
         home = sys.argv[1]
 
     # Delete all old images
     delete_old = True
     if delete_old:
-        dir_path = home + "python\\output"
+        dir_path = home + "python/output"
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
         os.mkdir(os.path.join(home + "python", "output"))
@@ -297,7 +297,7 @@ if __name__ == "__main__":
     #     declinations.append(0.0)
 
     # Get full star catalog
-    catalog = read_csv_catalog(home + "data\\catalog.csv")
+    catalog = read_csv_catalog(home + "data/catalog.csv")
 
     # Star rendering parameters
     relativeMagnitude = 6.0  # "full" exposure is set for stars of this magnitude
@@ -305,7 +305,7 @@ if __name__ == "__main__":
     starMaxPixelRadius = 16
 
     # Astrophysical parameters
-    spice.furnsh(home + "data\\metakernel.txt")
+    spice.furnsh(home + "data/metakernel.txt")
     tJ2000 = '2000 Jan 1, 00:00:00 UTC'
     tNow = '2025 July 4, 00:00:00 UTC'
     etJ2000 = spice.str2et(tJ2000)

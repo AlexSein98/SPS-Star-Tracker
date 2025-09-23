@@ -293,7 +293,7 @@ def check_axis(arr, dim, axis=None):
     if axis == None:
         if nrows == ncols:
             raise ValueError("ERROR ["+str(__name__)+"]: Length is equal for star pairs and no axis provided")
-        # TODO: verify that every function returns the same axis \\
+        # TODO: verify that every function returns the same axis /
         #  according to this convention
         axis = 0 if nrows == dim else 1
     if axis == 0 and nrows != dim:

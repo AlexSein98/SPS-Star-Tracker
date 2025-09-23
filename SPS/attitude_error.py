@@ -164,12 +164,12 @@ if __name__ == "__main__":
 
     # Star tracker "measurements" file
     n = len(sys.argv)
-    measurements = ".\\output.csv"
+    measurements = "./output.csv"
     if n > 1:
         measurements = sys.argv[1]
     
     # Truth source directory
-    truthSourceDir = ".\\py_src\\star\\"
+    truthSourceDir = "./py_src/star/"
     if n > 2:
         truthSourceDir = sys.argv[2]
     

@@ -91,7 +91,7 @@ image_array = np.frombuffer(pixel_data, dtype=np.uint8).reshape(2048, 2048, 4)
 
 # 6. Save image
 img = Image.fromarray(image_array)
-img.save(".\\py_src\\star\\python\\output\\shader_output.png")
+img.save("./py_src/star/python/output/shader_output.png")
 
 # Clean up
 gl.glDeleteProgram(shader_program)
