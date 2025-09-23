@@ -6,6 +6,7 @@ import csv
 from matplotlib import pyplot as plt
 import matplotlib
 import spiceypy as spice
+from py_src.star.python.transformations import *
 
 
 def read_csv(path: str, ignore: list=[], hasHeader=False):
@@ -22,41 +23,6 @@ def read_csv(path: str, ignore: list=[], hasHeader=False):
                 continue
             data.append([float(row[i]) for i in range(len(row)) if i not in ignore])
         return data
-
-
-class Quaternion:
-    def __init__(self, w: float, x: float, y: float, z: float):
-        self.w = w
-        self.x = x
-        self.y = y
-        self.z = z
-    
-    def mult(self, other):
-        w1 = self.w
-        x1 = self.x
-        y1 = self.y
-        z1 = self.z
-        w2 = other.w
-        x2 = other.x
-        y2 = other.y
-        z2 = other.z
-        return Quaternion(w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-                          w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-                          w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-                          w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
-    
-    def normalize(self):
-        mag_1 = 1.0 / np.sqrt(self.w ** 2 + self.x ** 2 + self.y ** 2 + self.z ** 2)
-        return Quaternion(self.w * mag_1, self.x * mag_1, self.y * mag_1, self.z * mag_1)
-    
-    def conjugate(self):
-        return Quaternion(-self.w, self.x, self.y, self.z)
-    
-    def as_w_first_array(self):
-        return np.array([self.w, self.x, self.y, self.z])
-    
-    def as_w_last_array(self):
-        return np.array([self.x, self.y, self.z, self.w])
 
 
 def matrix_to_angleaxis(m: np.ndarray[float]):
