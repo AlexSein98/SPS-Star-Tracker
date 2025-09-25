@@ -33,7 +33,7 @@ from SPS.gravity import *
 
 
 def angle_between_gravities(real_grav, sphere_grav):
-  return np.arccos(np.dot(normalize(real_grav), normalize(sphere_grav)))
+  return arccos_safe(np.dot(normalize(real_grav), normalize(sphere_grav)))
 
 
 
@@ -119,16 +119,20 @@ if __name__ == "__main__":
       angle_matrix.append([])
       for j in range(len(lats[i])):
         sphere_grav = -normalize(latlon_to_T(lats[i][j], lons[i][j]).T[0])
-        true_grav = sampler.SampleAcceleration(lats[i][j], lons[i][j], moon.radius, maxDegree, True, etNow)
+        true_grav = sampler.SampleAcceleration(lats[i][j], lons[i][j], moon.radius, maxDegree,
+                                               overrideSphericalHarmonics=True, includeThirdBody=True, et=etNow)
         _angle = angle_between_gravities(true_grav, sphere_grav)
         angle_matrix[i].append(_angle)
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
+    print(f'Max deviation = {np.max(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))))}"')
+
     plt.imshow(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))), cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
     plt.colorbar(label='Gravity Vector Difference (arcsec)')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    plt.title("Error Between Spherical Harmonic and Pure Spherical Gravity Models")
+    # plt.title("Error Between Spherical Harmonic and Pure Spherical Gravity Models")
+    plt.title("Error Between 3rd Body Perturbation and Pure Spherical Gravity Models")
     plt.show()

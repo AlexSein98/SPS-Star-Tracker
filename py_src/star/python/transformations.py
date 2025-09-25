@@ -314,13 +314,32 @@ class Quaternion:
 
 if __name__ == "__main__":
     os.system('cls')
+    np.set_printoptions(suppress=True)
+    testMode = 1
 
-    r = np.array([2193075.113333, 743921.623579, -2485679.376025])
-    R_mars = 3396190.0
-    lat, lon, alt = r_to_latlonalt(r, R_mars)
-    T = latlon_to_T(lat, lon) @ T2(np.pi / 2.0)
-    q: Quaternion = Quaternion.FromMatrix(T)
+    # For Space Teams University Competition 3
+    if testMode == 0:
+        r = np.array([2193075.113333, 743921.623579, -2485679.376025])
+        R_mars = 3396190.0
+        lat, lon, alt = r_to_latlonalt(r, R_mars)
+        T = latlon_to_T(lat, lon) @ T2(np.pi / 2.0)
+        q: Quaternion = Quaternion.FromMatrix(T)
 
-    print(f'lat = {round(lat, 6)}, lon = {round(lon, 6)}\n')
-    print(f'T = {T}\n')
-    print(f'q = [{round(q.w, 6)}, {round(q.x, 6)}, {round(q.y, 6)}, {round(q.z, 6)}]')
+        print(f'lat = {round(lat, 6)}, lon = {round(lon, 6)}\n')
+        print(f'T = {T}\n')
+        print(f'q = [w={round(q.w, 6)}, x={round(q.x, 6)}, y={round(q.y, 6)}, z={round(q.z, 6)}]')
+    # For Phobos alignment
+    elif testMode == 1:
+        import spiceypy as spice
+        home = "./py_src/star/"
+        spice.furnsh(home + "data/metakernel.txt")
+        tNow = '2025 July 4, 00:00:00 UTC'
+        etNow = spice.str2et(tNow)
+
+        marsLoc, _ = spice.spkpos("MARS", etNow, "IAU_PHOBOS", "NONE", "PHOBOS")
+        marsRot = spice.pxform("IAU_MARS", "IAU_PHOBOS", etNow)
+        q = Quaternion.FromMatrix(marsRot)
+
+        print(f'Mars location = {marsLoc * 1000.0}')
+        print(f'Mars rotation = [w={round(q.w, 6)}, x={round(q.x, 6)}, y={round(q.y, 6)}, z={round(q.z, 6)}]')
+

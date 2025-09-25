@@ -125,7 +125,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
         # Gradient method:
         i: int = 0
 
-        tol: float = 10.0  # m
+        tol: float = 1.0  # m
         dr: np.ndarray[float] = np.zeros(3)
         dr_prev: np.ndarray[float] = 2.0 * tol * np.ones(3)
 
@@ -144,7 +144,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
             G = sampler.InterpolateGradientGrid(lat, lon, Gxx, Gyy, Gzz, Gxy, Gxz, Gyz)
             G_inv = np.linalg.inv(G)
 
-            g_sensorFrame: np.ndarray[float] = np.array([-moon.mu / ((moon.radius + alt) ** 2), 0.0, 0.0])
+            g_sensorFrame: np.ndarray[float] = np.array([-np.linalg.norm(g), 0.0, 0.0])
             g_est = T_i_b @ T_i_c.T @ T_g_c @ g_sensorFrame + np.cross(Omega, np.cross(Omega, r_hat_i))
             dg = g - g_est
 
@@ -153,7 +153,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str)
             # print(f'g_est = {g_est}')
             
             dr = G_inv @ dg
-            r_hat_i_plus_1 = r_hat_i - 0.15 * dr
+            r_hat_i_plus_1 = r_hat_i - dr
 
             lat, lon, _ = r_to_latlonalt(r_hat_i_plus_1, moon.radius)
             alt = SampleDEM_LatLon(dem, lat, lon)

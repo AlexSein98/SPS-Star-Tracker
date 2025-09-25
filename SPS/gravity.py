@@ -37,6 +37,7 @@ class GravSampler:
         self.Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
     
     def SampleAcceleration(self, lat: float, lon: float, r: float, maxDegree: float, 
+                           overrideSphericalHarmonics: bool = False, 
                            includeThirdBody: bool = False, et: float = 0.0) -> np.ndarray[float]:
         """
         Latitude and longitude must be in degrees!
@@ -48,12 +49,15 @@ class GravSampler:
         T = latlon_to_T(lat, lon)
         pos_surface = r * T[:, 0]
         g_pcpf = T @ MakeGravGridPoint(self.Cilm, mu, R, r, lat, lon, maxDegree, omega)
+        
+        # Choose to override spherical harmonics with just spherical gravity (or not):
+        if overrideSphericalHarmonics:
+            g_pcpf = -moon.mu * pos_surface / (r ** 3)
 
-        # Third-body perturbations:
+        # Choose to do third-body perturbations (or not):
         if not includeThirdBody:
             return g_pcpf
-
-        # g_pcpf = -moon.mu * pos_surface / (r ** 3)  # Override spherical harmonics with just spherical gravity
+        
         planetIDs = [10, 199, 299, 399, 499, 599, 699, 799, 899]  # no Pluto hehe >:)
         T_moon = spice.pxform("J2000", "MOON_PA", et)
         for id in planetIDs:
@@ -63,7 +67,7 @@ class GravSampler:
             pos_m = 1000.0 * pos_km
 
             muResult = spice.bodvrd(name, "GM", 1)
-            mu: float = muResult[1][0]
+            mu: float = muResult[1][0] * 1e9
             r_sat_body: np.ndarray[float] = pos_m - T_moon.T @ pos_surface
             g_inertial = mu * (r_sat_body / (np.linalg.norm(r_sat_body) ** 3) - pos_m / (np.linalg.norm(pos_m) ** 3))
             g_pcpf += T_moon @ g_inertial
