@@ -58,7 +58,7 @@ test_bool = True
 ################################
 #SUPPORT FUNCTIONS
 ################################
-@timing_decorator
+# @timing_decorator
 def nchoosek(n, k):
     if n < 0 or k < 0:
         return 0
@@ -283,7 +283,7 @@ def attitude_svd(ei, es):
     return T
 
 
-@timing_decorator
+# @timing_decorator
 def triangle_isa_id(x_obs, x_cat, idx_star_pairs, isa_thresh, nmatch,
                     k, k_vector_interp, watchdog=None, verbose=False):
     import time

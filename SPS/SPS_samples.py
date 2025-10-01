@@ -5,12 +5,12 @@ import PIL.Image as Image
 import matplotlib.pyplot as plt
 
 from py_src.star.python.transformations import *
+from SPS.gravity import Planet
 
+from SPS.global_config import *
 
-os.system('cls')
 
 Image.MAX_IMAGE_PIXELS = None
-moonDEM = ".\\data\\ldem_64.tif"
 
 
 def ReadDEM(path: str) -> np.ndarray[float]:
@@ -31,24 +31,33 @@ def SampleDEM(dem: np.ndarray[float], _i: float, _j: float) -> float:
     return 0.25 * (sample_i_minus_j_minus + sample_i_plus_j_minus + sample_i_minus_j_plus + sample_i_plus_j_plus)
 
 
-def SampleDEM_LatLon(dem: np.ndarray[float], lat: float, lon: float) -> float:
+def SampleGlobalDEM_LatLon(dem: np.ndarray[float], lat: float, lon: float) -> float:
+    return SampleLocalDEM_LatLon(dem, lat, lon, [-90.0, 90.0, -180.0, 180.0])
+
+
+def SampleLocalDEM_LatLon(dem: np.ndarray[float], lat: float, lon: float, demLimits: list[float]) -> float:
+    minLat = demLimits[0]
+    maxLat = demLimits[1]
+    minLon = demLimits[2]
+    maxLon = demLimits[3]
+
     countLat = dem.shape[0]
     countLon = dem.shape[1]
-    _i = countLat * (lat + 90.0) / 180.0
-    _j = countLon * (lon + 180.0) / 360.0
+    _i = countLat * (lat - minLat) / (maxLat - minLat)
+    _j = countLon * (lon - minLon) / (maxLon - minLon)
+
     return SampleDEM(dem, _i, _j)
 
 
 if __name__ == "__main__":
-    rEarth = 6378136.3
-    rMoon = 1737400.0
-    rMars = 3396190.0
-    rPhobos = 11000.0
+    os.system('cls')
 
-    numLon: int = 180
-    numLat: int = int(0.5 * numLon - 1)
+    planet = globalConfig.planet
+
+    numLon: int = globalConfig.numLon
+    numLat: int = globalConfig.numLat
     
-    dem = ReadDEM(moonDEM)
+    dem = ReadDEM(planet.demName)
     countLat = dem.shape[0]
     countLon = dem.shape[1]
 
@@ -58,6 +67,9 @@ if __name__ == "__main__":
     lats = []
     lons = []
     alts = []
+    
+    scaleFactor = 1000.0 if planet.demUnits == "km" else 1.0
+
     for i in range(numLat):
         lat = (i + 1) * 180.0 * invNumLat - 90.0
         latIdx = (i + 1) * countLat * invNumLat
@@ -68,25 +80,28 @@ if __name__ == "__main__":
         for j in range(numLon):
             lon = j * 360.0 * invNumLon - 180.0
             lonIdx = j * countLon * invNumLon
+            altitude_m = scaleFactor * SampleDEM(dem, latIdx, lonIdx)
 
-            altitude_m = 1000.0 * SampleDEM(dem, latIdx, lonIdx)
-            # print(f'altitude at lat = {round(lat, 6)}, lon = {round(lon, 6)}: {round(altitude_m, 2)} m')
+            if planet.planetName == "EARTH":
+                altitude_m = max(altitude_m, 0.0)
             
             lats[i].append(lat)
             lons[i].append(lon)
             alts[i].append(altitude_m)
     
-    # with open(".\\sampleLatLongs.csv", "w") as samples:
-    #     writer = csv.writer(samples, delimiter=",", quotechar="|", lineterminator="\n")
-    #     for i in range(len(alts)):
-    #         for j in range(len(alts[0])):
-    #             writer.writerow([lats[i][j], lons[i][j], alts[i][j]])
+    with open("./sampleLatLongs_" + planet.planetName.title() + ".csv", "w") as samples:
+        writer = csv.writer(samples, delimiter=",", quotechar="|", lineterminator="\n")
+        for i in range(len(alts)):
+            for j in range(len(alts[0])):
+                writer.writerow([lats[i][j], lons[i][j], alts[i][j]])
     
     # Visualize:
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
-    plt.imshow(alts, cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
+    # cmap options: [RdYlGn_r, rainbow]
+    plt.imshow(alts, cmap='rainbow', aspect='equal', extent = [-180, 180, -90, 90])
     plt.colorbar(label='Altitude (m)')
+    plt.savefig("./" + planet.planetName.title() + "Heightmap.png", bbox_inches='tight', transparent="True", pad_inches=0)
 
     plt.show()

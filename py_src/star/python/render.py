@@ -11,6 +11,8 @@ import scipy.interpolate as interp
 import scipy.signal as signal
 import multiprocessing
 
+from SPS.gravity import Planet
+
 
 class StarParams:
     def __init__(self, rightAscension, declination, pmRA, pmDE, parallax, pHat, qHat):
@@ -24,7 +26,10 @@ class StarParams:
 
 
 class RenderParams:
-    def __init__(self, etJ2000: float, etNow: float, cameraPos: np.ndarray[float], U: int, V: int, fovU: float, pixelRadius: float, catalog, relativeMagnitude: float, relativeFlux: float):
+    def __init__(self, idx: int, etJ2000: float, etNow: float, cameraPos: np.ndarray[float], 
+                 U: int, V: int, fovU: float, pixelRadius: float, catalog, 
+                 relativeMagnitude: float, relativeFlux: float, planet: Planet):
+        self.idx = idx
         self.etJ2000 = etJ2000
         self.etNow = etNow
         self.cameraPos = cameraPos
@@ -35,6 +40,7 @@ class RenderParams:
         self.catalog = catalog
         self.relativeMagnitude = relativeMagnitude
         self.relativeFlux = relativeFlux
+        self.planet = planet
 
 
 def diffraction_limit(wavelength: float, apertureDiameter: float):
@@ -139,6 +145,9 @@ def planet_solar_flux_to_mag(planetName: str, et: float, correctionMode: int=1, 
 
 
 def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
+    # Index
+    idxLocal: int = renderParams.idx
+
     # Image dimensions
     dimU: int = renderParams.U
     dimV: int = renderParams.V
@@ -191,14 +200,16 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
         pixelLimitsU = [clamp(int(starPointingUV[0] + centerU - pixelRadius), 0, dimU - 1), clamp(int(starPointingUV[0] + centerU + pixelRadius), 0, dimU - 1)]
         pixelLimitsV = [clamp(int(starPointingUV[1] + centerV - pixelRadius), 0, dimV - 1), clamp(int(starPointingUV[1] + centerV + pixelRadius), 0, dimV - 1)]
         
+        color = np.array([catalog_subset[i][13], catalog_subset[i][14], catalog_subset[i][15]])
         for u in range(pixelLimitsU[0], pixelLimitsU[1]):
             for v in range(pixelLimitsV[0], pixelLimitsV[1]):
-                uc = u - centerU
-                vc = v - centerV
+                # uc = u - centerU
+                # vc = v - centerV
 
-                pixelDistanceSquared = (starPointingUV[0] - uc) ** 2 + (starPointingUV[1] - vc) ** 2
+                # pixelDistanceSquared = (starPointingUV[0] - uc) ** 2 + (starPointingUV[1] - vc) ** 2
+                pixelDistanceSquared = (starPointingUV[0] - (u - centerU)) ** 2 + (starPointingUV[1] - (v - centerV)) ** 2
                 intensity = flux * point_spread_function_gaussian(0.0, 1.0, pixelDistanceSquared, diffractionLimitPx)
-                img_array[v][u] += intensity * np.array([catalog_subset[i][13], catalog_subset[i][14], catalog_subset[i][15]])
+                img_array[v][u] += intensity * color
 
     # Render planets
     # planetsInView, planetColors = get_planets_in_frame(cameraPos, T_ICRFCamera, etNow, fieldOfViewU, fieldOfViewV, correctionMode=0, toleranceDegrees=1.0)
@@ -245,7 +256,8 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
 
     # Save image
     img = cv2.cvtColor(np.clip(img_array, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-    destination = home_dir + 'python\\output\\StarRender_ra_' + str(round(ra, 3)) + '_de_' + str(round(de, 3)) + '.png'
+    destination = home_dir + "python/output/" + renderParams.planet.planetName.title() + \
+        "/StarRender_" + str(idxLocal).zfill(6) + ".png"
     cv2.imwrite(destination, img)
 
 
@@ -266,17 +278,17 @@ if __name__ == "__main__":
 
     # Process arguments
     n = len(sys.argv)
-    home = ".\\py_src\\star\\"
+    home = "./py_src/star/"
     if n > 1:
         home = sys.argv[1]
 
     # Delete all old images
     delete_old = True
     if delete_old:
-        dir_path = home + "python\\output"
+        dir_path = home + "python/output/Mars"
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
-        os.mkdir(os.path.join(home + "python", "output"))
+        os.mkdir(os.path.join(home + "python", "output", "Mars"))
 
     # Lists of right ascensions and declinations to render
     # step = 15.0
@@ -297,7 +309,7 @@ if __name__ == "__main__":
     #     declinations.append(0.0)
 
     # Get full star catalog
-    catalog = read_csv_catalog(home + "data\\catalog.csv")
+    catalog = read_csv_catalog(home + "data/catalog.csv")
 
     # Star rendering parameters
     relativeMagnitude = 6.0  # "full" exposure is set for stars of this magnitude
@@ -305,7 +317,7 @@ if __name__ == "__main__":
     starMaxPixelRadius = 16
 
     # Astrophysical parameters
-    spice.furnsh(home + "data\\metakernel.txt")
+    spice.furnsh(home + "data/metakernel.txt")
     tJ2000 = '2000 Jan 1, 00:00:00 UTC'
     tNow = '2025 July 4, 00:00:00 UTC'
     etJ2000 = spice.str2et(tJ2000)
@@ -358,4 +370,4 @@ if __name__ == "__main__":
     #     true_data.append(get_true_attitude(ra, de))
     
     # Write output
-    write_csv(home + "truth_data.csv", true_data)
+    write_csv(home + "truth_data_Mars.csv", true_data)

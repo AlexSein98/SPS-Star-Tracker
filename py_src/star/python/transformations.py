@@ -1,5 +1,14 @@
 import numpy as np
 import os
+import copy
+
+
+class UniversalConstants:
+    c = 299792.458              # speed of light in km/s
+    G = 6.67430e-20             # gravitational constant in km^3/kg*s^2
+    AU = 149597870.700          # astronomical unit in km
+    h = 6.62607015e-40          # Planck constant in kg*km^2/s
+    alpha = 0.0072973525693     # fine structure constant (unitless!)
 
 
 def T1(angle: float) -> np.ndarray[float]:
@@ -69,6 +78,57 @@ def T_to_latlon(T: np.ndarray[float]):
     return r_hat_to_latlon(r_hat)
 
 
+def planetographic_to_cartesian(lat: float, lon: float, alt: float, a: float, b: float) -> np.ndarray[float]:
+    lat_rad: float = np.deg2rad(lat)
+    lon_rad: float = np.deg2rad(lon)
+    N: float = a ** 2 / np.sqrt(a ** 2 * np.cos(lat_rad) ** 2 + b ** 2 * np.sin(lat_rad) ** 2)
+    x = (N + alt) * np.cos(lat_rad) * np.cos(lon_rad)
+    y = (N + alt) * np.cos(lat_rad) * np.sin(lon_rad)
+    z = ((b ** 2 / a ** 2) * N + alt) * np.sin(lat_rad)
+    return np.array([x, y, z])
+
+
+def cartesian_to_planetographic(xyz: np.ndarray[float], a: float, b: float) -> tuple[float, float, float]:
+    # From Vallado, Fundamentals of Astrodynamics and Applications 4th edition, Algorithm 12: "ECEF To LatLon"
+    x: float = xyz[0]
+    y: float = xyz[1]
+    z: float = xyz[2]
+    r_delta: float = np.sqrt(x ** 2 + y ** 2)
+
+    alpha: float = np.arctan2(y, x)  # This directly becomes longitude
+    phi_pg: float = np.arctan(z / r_delta)
+    ecc: float = np.sqrt(1.0 - (b / a) ** 2)
+    C: float = a / np.sqrt(1.0 - ecc ** 2 * np.sin(phi_pg) ** 2)
+    
+    phi_pg_old: float = 2.0 * phi_pg
+    while abs(phi_pg - phi_pg_old) > arcsec_to_rad(0.1):
+        phi_pg_old = copy.deepcopy(phi_pg)
+        C = a / np.sqrt(1.0 - ecc ** 2 * np.sin(phi_pg) ** 2)
+        phi_pg = np.arctan((z + C * ecc ** 2 * np.sin(phi_pg)) / r_delta)
+    
+    h_ellp: float = r_delta / np.cos(phi_pg) - C
+    if abs(phi_pg) > np.deg2rad(89.0):
+        S: float = a * (1 - ecc ** 2) / np.sqrt(1.0 - ecc ** 2 * np.sin(phi_pg) ** 2)
+        h_ellp = z / np.sin(phi_pg) - S
+    
+    lat: float = np.rad2deg(phi_pg)
+    lon: float = np.rad2deg(alpha)
+    alt: float = h_ellp
+    return lat, lon, alt
+
+
+# def latitude_pc_to_pg(phi_pc: float, a: float, b: float) -> float:
+#     ecc: float = np.sqrt(1.0 - (b / a) ** 2)
+#     phi_pg: float = np.arctan(np.tan(np.deg2rad(phi_pc)) / (1.0 - ecc ** 2))
+#     return np.rad2deg(phi_pg)
+
+
+# def latitude_pg_to_pc(phi_pg: float, a: float, b: float) -> float:
+#     ecc: float = np.sqrt(1.0 - (b / a) ** 2)
+#     phi_pc: float = np.arctan(np.tan(np.deg2rad(phi_pg)) * (1.0 - ecc ** 2))
+#     return np.rad2deg(phi_pc)
+
+
 def T_angle_axis(angle: float, axis: np.ndarray[float]) -> np.ndarray[float]:
     e_cross = np.array([[0.0, -axis[2], axis[1]], 
                         [axis[2], 0.0, -axis[0]], 
@@ -125,19 +185,19 @@ def deg_to_dms_string(deg: float, decimalPlaces: int=3):
     return f'{d} deg {m} arcmin {round(s, decimalPlaces)} arcsec'
 
 
-def sec_to_year(sec: float):
+def sec_to_year(sec: float) -> float:
     return sec / (86400.0 * 365.25)
 
 
-def arcsec_to_rad(arcsec: float):
+def arcsec_to_rad(arcsec: float) -> float:
     return np.deg2rad(arcsec / 3600.0)
 
 
-def marcsec_to_rad(marcsec: float):
+def marcsec_to_rad(marcsec: float) -> float:
     return arcsec_to_rad(marcsec / 1000.0)
 
 
-def deg_to_arcsec(deg):
+def deg_to_arcsec(deg) -> float:
     return deg * 3600.0
 
 
@@ -315,31 +375,61 @@ class Quaternion:
 if __name__ == "__main__":
     os.system('cls')
     np.set_printoptions(suppress=True)
-    testMode = 1
+    testMode = 2
 
     # For Space Teams University Competition 3
-    if testMode == 0:
-        r = np.array([2193075.113333, 743921.623579, -2485679.376025])
-        R_mars = 3396190.0
-        lat, lon, alt = r_to_latlonalt(r, R_mars)
-        T = latlon_to_T(lat, lon) @ T2(np.pi / 2.0)
-        q: Quaternion = Quaternion.FromMatrix(T)
+    # if testMode == 0:
+    #     r = np.array([2193075.113333, 743921.623579, -2485679.376025])
+    #     R_mars = 3396190.0
+    #     lat, lon, alt = r_to_latlonalt(r, R_mars)
+    #     T = latlon_to_T(lat, lon) @ T2(np.pi / 2.0)
+    #     q: Quaternion = Quaternion.FromMatrix(T)
 
-        print(f'lat = {round(lat, 6)}, lon = {round(lon, 6)}\n')
-        print(f'T = {T}\n')
-        print(f'q = [w={round(q.w, 6)}, x={round(q.x, 6)}, y={round(q.y, 6)}, z={round(q.z, 6)}]')
+    #     print(f'lat = {round(lat, 6)}, lon = {round(lon, 6)}\n')
+    #     print(f'T = {T}\n')
+    #     print(f'q = [w={round(q.w, 6)}, x={round(q.x, 6)}, y={round(q.y, 6)}, z={round(q.z, 6)}]')
+    
     # For Phobos alignment
-    elif testMode == 1:
-        import spiceypy as spice
-        home = "./py_src/star/"
-        spice.furnsh(home + "data/metakernel.txt")
-        tNow = '2025 July 4, 00:00:00 UTC'
-        etNow = spice.str2et(tNow)
+    # if testMode == 1:
+    #     import spiceypy as spice
+    #     home = "./py_src/star/"
+    #     spice.furnsh(home + "data/metakernel.txt")
+    #     tNow = '2025 July 4, 00:00:00 UTC'
+    #     etNow = spice.str2et(tNow)
 
-        marsLoc, _ = spice.spkpos("MARS", etNow, "IAU_PHOBOS", "NONE", "PHOBOS")
-        marsRot = spice.pxform("IAU_MARS", "IAU_PHOBOS", etNow)
-        q = Quaternion.FromMatrix(marsRot)
+    #     marsLoc, _ = spice.spkpos("MARS", etNow, "IAU_PHOBOS", "NONE", "PHOBOS")
+    #     marsRot = spice.pxform("IAU_MARS", "IAU_PHOBOS", etNow)
+    #     q = Quaternion.FromMatrix(marsRot)
 
-        print(f'Mars location = {marsLoc * 1000.0}')
-        print(f'Mars rotation = [w={round(q.w, 6)}, x={round(q.x, 6)}, y={round(q.y, 6)}, z={round(q.z, 6)}]')
+    #     print(f'Mars location = {marsLoc * 1000.0}')
+    #     print(f'Mars rotation = [w={round(q.w, 6)}, x={round(q.x, 6)}, y={round(q.y, 6)}, z={round(q.z, 6)}]')
 
+    # For geocentric/geodetic testing:
+    # if testMode == 2:
+    #     # Vallado, Fundamentals of Astrodynamics and Applications 4th edition, Example 3-2
+    #     phi_pg = 85.0
+    #     lon = 140.0
+    #     alt = -500
+        
+    #     # a = 6378136.3
+    #     # b = 6356751.6005
+
+    #     a = 3396000.0
+    #     b = 3376200.0
+
+    #     xyz_pg = planetographic_to_cartesian(phi_pg, lon, alt, a, b)
+    #     lla_pg = cartesian_to_planetographic(xyz_pg, a, b)
+        
+    #     print('With non-zero eccentricity:')
+    #     print(f'xyz_pg = {xyz_pg}')
+    #     print(f'lla_pg = {lla_pg}\n')
+        
+    #     xyz_pc = planetographic_to_cartesian(phi_pg, lon, alt, a, a)
+    #     lla_pc = cartesian_to_planetographic(xyz_pc, a, a)
+        
+    #     print('With zero eccentricity:')
+    #     print(f'xyz_pc = {xyz_pc}')
+    #     print(f'lla_pc = {lla_pc}\n')
+
+    #     print(f'Difference: {xyz_pg - xyz_pc} m')
+    #     print(f'Difference norm: {np.linalg.norm(xyz_pg - xyz_pc)} m')

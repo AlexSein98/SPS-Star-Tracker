@@ -25,7 +25,14 @@ from star_tracker import main
 from star_tracker.cam_matrix import *
 from star_tracker.array_transformations import *
 
+from SPS.global_config import *
+
 import spiceypy as spice
+
+
+os.system('cls')
+os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
+
 
 # w-last quaternions here
 def quat_mult(q1, q2):
@@ -42,6 +49,9 @@ def quat_mult(q1, q2):
                      w * z2 + x * y2 - y * x2 + z * w2,
                      w * w2 - x * x2 - y * y2 - z * z2])
 
+
+planet = globalConfig.planet
+
 ################################
 #USER INPUT
 ################################
@@ -54,22 +64,22 @@ max_num_stars_to_process = 40 # maximum number of centroids to attempt to match 
 low_thresh_pxl_intensity = None
 hi_thresh_pxl_intensity = None
 
-VERBOSE = True # set True for prints on results
+VERBOSE = False # set True for prints on results
 graphics = False # set True for graphics throughout the solve process
 np.set_printoptions(suppress=True)
 
 n = len(sys.argv)
-home = ".\\"
+home = "./"
 if n > 1:
     home = sys.argv[1]   
 
-imgSourceDir = home + "py_src\\star\\python\\output"
+imgSourceDir = home + "py_src/star/python/output/" + planet.planetName.title()
 if n > 2:
     imgSourceDir = sys.argv[2]
 
 data_path = home + 'data' # full path to your data
-cam_config_file_path = home + 'data\\cam_config\\Custom_cam.json' # full path (including filename) of your cam config file
-darkframe_file_path = home + 'Images\\darkframes\\darkframe.png' # full path (including filename) of your darkframe file
+cam_config_file_path = home + 'data/cam_config/Custom_cam.json' # full path (including filename) of your cam config file
+darkframe_file_path = home + 'Images/darkframes/darkframe.png' # full path (including filename) of your darkframe file
 image_extension = ".png" # the image extension to search for in the data_path directory
 cat_prefix ='' # if the catalog has a prefix, define it here
 
@@ -120,9 +130,9 @@ total_start = time.time()
 
 dir_contents = os.listdir(imgSourceDir)
 for i in range(len(dir_contents)):
-     dir_contents[i] = imgSourceDir + "\\" + dir_contents[i]
+     dir_contents[i] = imgSourceDir + "/" + dir_contents[i]
      print(f'dir_contents[{i}] = {dir_contents[i]}')
-dir_contents.sort(key=os.path.getctime)
+dir_contents.sort()
 
 image_names = []
 
@@ -131,11 +141,11 @@ for item in dir_contents:
         image_names+=[os.path.abspath(item)]
         # image_names += [item]
 
+idx: int = 0
 for image_filename in image_names:
-
     image_name += [image_filename]
-    print("===================================================")
-    print(image_filename)
+    # print("===================================================")
+    # print(image_filename)
 
     #run star tracker
     solve_start_time = time.time()
@@ -147,7 +157,7 @@ for image_filename in image_names:
 
     solve_time += [time.time()-solve_start_time]
 
-    #collect data
+    # Collect data
     try:
         assert not np.any(np.isnan(q_est))
         if VERBOSE:
@@ -166,12 +176,13 @@ for image_filename in image_names:
         qv1 += [999]
         qv2 += [999]
 
-
-
     ttime += [time.time()]
     sram  += [psutil.virtual_memory().percent]
     #scpu  += [psutil.cpu_percent(2)]
     scpu  += [psutil.cpu_percent()]
+
+    print(f'Completed image {idx} ({round(float(idx) / float(len(image_names)) * 100.0, 2)} %)')
+    idx += 1
 
 
 data = {'image name':image_name,'time':ttime,'RAM':sram,'CPU':scpu,'image solve time (s)':solve_time, 'qs':qs,'qv0':qv0,'qv1':qv1,'qv2':qv2}
@@ -190,7 +201,7 @@ if n > 3:
     filename = sys.argv[3]
 else:
     # filename = home + now + '_data_file_nm-'+str(nmatch)+'_pxl-'+str(starMatchPixelTol)+'.csv'
-    filename = home + "output.csv"
+    filename = home + "output_" + planet.planetName.title() + ".csv"
 
 with open(filename,'w', newline='') as csv_file:
     writer=csv.writer(csv_file)

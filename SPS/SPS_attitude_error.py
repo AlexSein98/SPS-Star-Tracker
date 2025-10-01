@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 import matplotlib
 import spiceypy as spice
 from py_src.star.python.transformations import *
+from SPS.global_config import *
 
 
 def read_csv(path: str, ignore: list=[], hasHeader=False):
@@ -82,16 +83,25 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
         phi_d, _ = matrix_to_angleaxis(m)
         phi_arcsec = deg_to_arcsec(phi_d)
 
-        # Add to plotting array even if it's
+        # Add to plotting array even if it's rejected
         latTruth = float(latLon_i[0])
         lonTruth = float(latLon_i[1])
         latIdx = int(numLat * (90.0 - latTruth) / 180.0)
         lonIdx = int(numLon * (lonTruth + 180.0) / 360.0)
+
+        print(f'latIdx = {latIdx}')
+        print(f'lonIdx = {lonIdx}\n')
+
         errorsArcsecArray[latIdx, lonIdx] = phi_arcsec if phi_arcsec < reject else reject
 
         if reject != 0 and phi_arcsec > reject:
             continue
         errorsArcsec.append(phi_arcsec)
+    
+    # for i in range(len(errorsArcsecArray)):
+    #     errorsArcsecArrayLine = errorsArcsecArray[i]
+    #     for j in range(len(errorsArcsecArrayLine)):
+    #         print(f'Error at [{i}, {j}]: {errorsArcsecArrayLine[j]}')
     
     # Calculate statistics
     mean = np.mean(errorsArcsec)
@@ -139,7 +149,8 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
     ax3 = fig2.add_subplot(111)
     plt.sca(ax3)
 
-    plt.imshow(errorsArcsecArray, cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
+    # cmap options: [RdYlGn_r, rainbow]
+    plt.imshow(errorsArcsecArray, cmap='rainbow', aspect='equal', extent = [-180,180,-90,90])
     plt.colorbar(label='Star Sensor Attitude Error (arcsec)')
     ax3.set_xlabel("Longitude")
     ax3.set_ylabel("Latitude")
@@ -150,24 +161,21 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
 
 
 if __name__ == "__main__":
-    rEarth = 6378136.3
-    rMoon = 1737400.0
-    rMars = 3396190.0
-    rPhobos = 11000.0
+    planet = globalConfig.planet
 
     # Star tracker "measurements" file
     n = len(sys.argv)
-    measurements = ".\\output.csv"
+    measurements = "./output_" + planet.planetName.title() + ".csv"
     if n > 1:
         measurements = sys.argv[1]
     
     # Truth source directory
-    truthSourceDir = ".\\py_src\\star\\"
+    truthSourceDir = "./py_src/star/"
     if n > 2:
         truthSourceDir = sys.argv[2]
     
     # Latitude, longitude, and altitude
-    latLonDataPath = ".\\sampleLatLongs.csv"
+    latLonDataPath = "./sampleLatLongs_" + planet.planetName.title() + ".csv"
     if n > 3:
         latLonDataPath = sys.argv[3]
     
@@ -176,12 +184,6 @@ if __name__ == "__main__":
     if n > 4:
         reject = float(sys.argv[4])
     
-    # Planet radius for evaluating location error
-    radius = 0.0
-    if n > 5:
-        radius = float(sys.argv[5])
-    else:
-        radius = rMoon
+    print(f'latLonDataPath = {latLonDataPath}')
 
-    print(f'{truthSourceDir + "truth_data.csv"}')
-    plot_errors(truthSourceDir + "truth_data.csv", measurements, latLonDataPath, reject=reject, planetRadius=radius)
+    plot_errors(truthSourceDir + "truth_data_" + planet.planetName.title() + ".csv", measurements, latLonDataPath, reject=reject, planetRadius=planet.radius)

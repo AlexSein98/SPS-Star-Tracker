@@ -164,7 +164,7 @@ def reproject(img, c, idmatch, q_est, x_obs=None, x_cat=None):
 
 
 def find_candidate_stars(img, low_thresh=None, hi_thresh=None,
-                         min_star_area=3, max_star_area=400, graphics=False):
+                         min_star_area=3, max_star_area=400, graphics=False, verbose=False):
     import numpy as np
     import cv2
     from rpi_core import calculate_center_intensity
@@ -210,8 +210,8 @@ def find_candidate_stars(img, low_thresh=None, hi_thresh=None,
         fig.tight_layout()
         plt.show()
 
-
-    print("Found " + str(len(contours)) + " contours")
+    if verbose:
+        print("Found " + str(len(contours)) + " contours")
 
     try:
         connectivity = 8
@@ -223,7 +223,8 @@ def find_candidate_stars(img, low_thresh=None, hi_thresh=None,
         # TODO determine if this needs to be resurrected
         # TODO should this use the raw image or binary image?  I think it should use raw like it is...
         coi, intensities = calculate_center_intensity(img, stats, min_star_area, max_star_area)
-        print("Found " + str(len(coi)) + " centroids")
+        if verbose:
+            print("Found " + str(len(coi)) + " centroids")
         return coi, intensities
 
 
@@ -302,4 +303,4 @@ def quat_error(p, q):
     # Using formula from http://www.boris-belousov.net/2016/12/01/quat-dist/
     import numpy as np
     R = np.dot(p, q.T)
-    return arccos((np.trace(R)-1)/2)
+    return np.arccos((np.trace(R)-1)/2)

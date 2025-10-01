@@ -63,7 +63,7 @@ V: int = 1024
 fov_deg = 0.05
 pixelscale = deg_to_arcsec(fov_deg) / float(U)
 
-wave_offset = 2
+wave_offset = -0.5
 osys = poppy.OpticalSystem("test", oversample=2)
 osys.add_pupil( poppy.CircularAperture(radius=radius))    # pupil radius in meters
 osys.add_pupil( poppy.ThinLens(nwaves=wave_offset, reference_wavelength=source['wavelengths'][1], radius=radius))
@@ -72,8 +72,7 @@ osys.add_detector(pixelscale=pixelscale, fov_arcsec=deg_to_arcsec(fov_deg))
 psf = osys.calc_psf(source=source)
 
 plt.subplot(111)
-# poppy.display_psf(psf, title='Defocused by {0} waves'.format(wave_offset),
-#     colorbar_orientation='horizontal')
+# poppy.display_psf(psf, title='Defocused by {0} waves'.format(wave_offset), colorbar_orientation='horizontal')
 poppy.display_profiles(psf)
 rr, radialProfile = poppy.radial_profile(psf, binsize=1)  # 1 arcsecond bins?
 radialProfileFunc = measure_radial_profile(rr, radialProfile)

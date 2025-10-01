@@ -17,7 +17,7 @@ from support_functions import timing_decorator, reproject
 ################################
 #SUPPORT FUNCTIONS
 ################################
-@timing_decorator
+# @timing_decorator
 def star_tracker(img_file_name, cam_config_file_name, m=None, q=None, x_cat=None, k=None,
                  indexed_star_pairs=None, darkframe_file=None, undist_img_bool=True, n_stars=30,
                  low_thresh_pxl_intensity=None, hi_thresh_pxl_intensity=None, min_star_area=4,
@@ -66,7 +66,7 @@ def star_tracker(img_file_name, cam_config_file_name, m=None, q=None, x_cat=None
 
     centroids, intensities = support_functions.find_candidate_stars(
         img, min_star_area=min_star_area, max_star_area=max_star_area,
-        low_thresh=low_thresh_pxl_intensity, hi_thresh=hi_thresh_pxl_intensity, graphics=graphics)
+        low_thresh=low_thresh_pxl_intensity, hi_thresh=hi_thresh_pxl_intensity, graphics=graphics, verbose=verbose)
 
     # if fewer than 3 centroids are found, don't bother.  Gums things up downstream.
     if len(centroids) < 3:

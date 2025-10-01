@@ -1,25 +1,19 @@
-#pragma warning(disable: 4883)
-#include "GAS_GMMoon_GRAIL150.h"
-
-import numpy as np
-
-class UniversalConstants:
-    c = 299792.458              # speed of light in km/s
-    G = 6.67430e-20             # gravitational constant in km^3/kg*s^2
-    AU = 149597870.700          # astronomical unit in km
-    h = 6.62607015e-40          # Planck constant in kg*km^2/s
-    alpha = 0.0072973525693     # fine structure constant (unitless!)
+from SPS.grav_model import *
 
 
-class grav_moon_GRAIL150:
+class grav_moon_GRAIL150(grav_base):
     def __init__(self):
-        self.maxDegree = 150
-        self.maxOrder = 150
-        self.mu = 4902.79980693169e9
-        self.mass = self.mu / (UniversalConstants.G * 1e9)
-        self.omega = 2.66e-6
-        self.radius = 1737400.0
-        self.flattening = 0.0
+        name = "MOON"
+        spiceBodyFrame = "MOON_PA"
+        maxDegree = 150
+        maxOrder = 150
+        mu = 4902.79980693169e9
+        omega = 2.66e-6
+        # omega = 0.0
+        radius = 1737400.0
+        polarRadius = 1737400.0
+
+        super(grav_moon_GRAIL150, self).__init__(name, spiceBodyFrame, maxDegree, maxOrder, mu, omega, radius, polarRadius)
 
         Clm = np.zeros((self.maxDegree + 1, self.maxOrder + 1))
         Slm = np.zeros((self.maxDegree + 1, self.maxOrder + 1))

@@ -1,73 +1,17 @@
-from SPS.grav_moon_GRAIL150 import *
 from py_src.star.python.transformations import *
 
-import PIL.Image as Image
-
-import sys
-import os
-import csv
-import copy
-
 from matplotlib import pyplot as plt
-import matplotlib
 import numpy as np
 import spiceypy as spice
 
-import pyshtools as sh
-import pyshtools.gravmag as grav
 from pyshtools.gravmag import MakeGravGridPoint
 
-from SPS.gravity import *
-
-
-# def sample_gravity(moon: grav_moon_GRAIL150, Cilm, lat, lon, r, max_degree):
-#   mu = moon.mu
-#   R = moon.radius
-#   omega = moon.omega
-
-#   T = latlon_to_T(lat, lon)
-#   g_pcpf = T @ MakeGravGridPoint(Cilm, mu, R, r, lat, lon, max_degree, omega)
-#   return normalize(g_pcpf)
-
-
+from SPS.SPS_samples import *
+from SPS.global_config import *
 
 
 def angle_between_gravities(real_grav, sphere_grav):
-  return arccos_safe(np.dot(normalize(real_grav), normalize(sphere_grav)))
-
-
-
-
-# Set variables necessary for sample_gravity function
-moon = grav_moon_GRAIL150()
-
-# max_degree = 128
-# max_order = 128
-# Cilm = np.dstack((moon.Clm[:max_degree + 1, :max_order + 1], moon.Slm[:max_degree + 1, :max_order + 1])).transpose((2, 0, 1))
-# Cilm[0, 0, 0] = 1.0  # add spherical component of gravity
-
-
-
-Image.MAX_IMAGE_PIXELS = None
-moonDEM = "./data/ldem_64.tif"
-
-
-def ReadDEM(path: str) -> np.ndarray[float]:
-    dem = np.asarray(Image.open(path))
-    return dem
-
-
-def SampleDEM(dem: np.ndarray[float], _i: float, _j: float):
-    _i_minus: int = int(np.floor(_i))
-    _i_plus: int = int((_i_minus + 1) % dem.shape[0])
-    _j_minus: int = int(np.floor(_j))
-    _j_plus: int = int((_j_minus + 1) % dem.shape[1])
-
-    sample_i_minus_j_minus = dem[_i_minus, _j_minus]
-    sample_i_plus_j_minus = dem[_i_plus, _j_minus]
-    sample_i_minus_j_plus = dem[_i_minus, _j_plus]
-    sample_i_plus_j_plus = dem[_i_plus, _j_plus]
-    return 0.25 * (sample_i_minus_j_minus + sample_i_plus_j_minus + sample_i_minus_j_plus + sample_i_plus_j_plus)
+   return arccos_safe(np.dot(normalize(real_grav), normalize(sphere_grav)))
 
 
 if __name__ == "__main__":
@@ -76,15 +20,13 @@ if __name__ == "__main__":
     tNow = '2025 July 4, 00:00:00 UTC'
     etNow = spice.str2et(tNow)
 
-    rEarth = 6378136.3
-    rMoon = 1737400.0
-    rMars = 3396190.0
-    rPhobos = 11000.0
+    planet = globalConfig.planet
+    gravModel: grav_base = planet.gravModel
 
-    numLon: int = 180
-    numLat: int = int(0.5 * numLon - 1)
+    numLon: int = globalConfig.numLon
+    numLat: int = globalConfig.numLat
 
-    dem = ReadDEM(moonDEM)
+    dem = ReadDEM(planet.demName)
     countLat = dem.shape[0]
     countLon = dem.shape[1]
 
@@ -94,6 +36,9 @@ if __name__ == "__main__":
     lats = []
     lons = []
     alts = []
+
+    scaleFactor = 1000.0 if planet.demUnits == "km" else 1.0
+
     for i in range(numLat):
         lat = 90.0 - (i + 1) * 180.0 * invNumLat
         latIdx = (i + 1) * countLat * invNumLat
@@ -105,22 +50,22 @@ if __name__ == "__main__":
             lon = j * 360.0 * invNumLon - 180.0
             lonIdx = j * countLon * invNumLon
 
-            altitude_m = 1000.0 * SampleDEM(dem, latIdx, lonIdx)
+            altitude_m = scaleFactor * SampleDEM(dem, latIdx, lonIdx)
             lats[i].append(lat)
             lons[i].append(lon)
             alts[i].append(altitude_m)
 
     angle_matrix: list[list[float]] = []
-    maxDegree: int = 128
-    maxOrder: int = 128
-    sampler = GravSampler(maxDegree, maxOrder)
+    maxDegree: int = 100
+    maxOrder: int = 100
+    sampler = GravSampler(gravModel, maxDegree, maxOrder)
 
     for i in range(len(lats)):
       angle_matrix.append([])
       for j in range(len(lats[i])):
         sphere_grav = -normalize(latlon_to_T(lats[i][j], lons[i][j]).T[0])
-        true_grav = sampler.SampleAcceleration(lats[i][j], lons[i][j], moon.radius, maxDegree,
-                                               overrideSphericalHarmonics=True, includeThirdBody=True, et=etNow)
+        true_grav = sampler.SampleAcceleration(lats[i][j], lons[i][j], planet.radius + alts[i][j], maxDegree,
+                                               overrideSphericalHarmonics=False, includeThirdBody=True, et=etNow)
         _angle = angle_between_gravities(true_grav, sphere_grav)
         angle_matrix[i].append(_angle)
 
@@ -129,10 +74,11 @@ if __name__ == "__main__":
 
     print(f'Max deviation = {np.max(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))))}"')
 
-    plt.imshow(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))), cmap='RdYlGn_r', aspect='equal', extent = [-180,180,-90,90])
+    # cmap options: [RdYlGn_r, rainbow]
+    plt.imshow(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))), cmap='rainbow', aspect='equal', extent = [-180,180,-90,90])
     plt.colorbar(label='Gravity Vector Difference (arcsec)')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    # plt.title("Error Between Spherical Harmonic and Pure Spherical Gravity Models")
-    plt.title("Error Between 3rd Body Perturbation and Pure Spherical Gravity Models")
+    plt.title("Error Between Spherical Harmonic and Pure Spherical Gravity Models")
+    # plt.title("Error Between 3rd Body Perturbation and Pure Spherical Gravity Models")
     plt.show()
