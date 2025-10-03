@@ -144,6 +144,20 @@ def planet_solar_flux_to_mag(planetName: str, et: float, correctionMode: int=1, 
     return flux_to_magnitude(flux_frac, ev_1AU, 1.0)
 
 
+def draw_star(img_subset: np.ndarray[float], indicesU: np.ndarray[float], indicesV: np.ndarray[float], 
+              starPointingUV: np.ndarray[float], centerU: float, centerV: float, diffractionLimitPx: float, 
+              flux: float, color: np.ndarray[float]) -> np.ndarray[float]:
+    pixelDistanceSquared = (starPointingUV[0] - (indicesU - centerU)) ** 2 + (starPointingUV[1] - (indicesV - centerV)) ** 2
+    intensity = flux * point_spread_function_gaussian(0.0, 1.0, pixelDistanceSquared, diffractionLimitPx)
+
+    # print(f'pixelDistanceSquared dims = {pixelDistanceSquared.shape}')
+    # print(f'intensity dims            = {intensity.shape}')
+    # print(f'img_subset dims           = {img_subset.shape}')
+    
+    img_subset += np.dstack((intensity, intensity, intensity)) * color
+    return img_subset
+
+
 def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
     # Index
     idxLocal: int = renderParams.idx
@@ -167,7 +181,7 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
     catalog_subset = subset_catalog(catalog, starsInFrame)
 
     # Star UV coordinates
-    star_coords = []
+    star_coords: list[np.ndarray[float]] = []
     etJ2000 = renderParams.etJ2000
     etNow = renderParams.etNow
     cameraPos = renderParams.cameraPos
@@ -195,21 +209,29 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
         starPointingUV = star_coords[i]
         flux = magnitude_to_flux(catalog_subset[i][11], relativeMagnitude, relativeFlux)
 
-        falloff = falloff_gaussian(0.0, flux, 1.0 / 255.0, diffractionLimitPx)
-        pixelRadius = max(np.ceil(10.0 * falloff), renderParams.pixelRadius)
+        # falloff = falloff_gaussian(0.0, flux, 1.0 / 255.0, diffractionLimitPx)
+        # pixelRadius = max(np.ceil(10.0 * falloff), renderParams.pixelRadius)
+        pixelRadius = renderParams.pixelRadius
         pixelLimitsU = [clamp(int(starPointingUV[0] + centerU - pixelRadius), 0, dimU - 1), clamp(int(starPointingUV[0] + centerU + pixelRadius), 0, dimU - 1)]
         pixelLimitsV = [clamp(int(starPointingUV[1] + centerV - pixelRadius), 0, dimV - 1), clamp(int(starPointingUV[1] + centerV + pixelRadius), 0, dimV - 1)]
         
-        color = np.array([catalog_subset[i][13], catalog_subset[i][14], catalog_subset[i][15]])
-        for u in range(pixelLimitsU[0], pixelLimitsU[1]):
-            for v in range(pixelLimitsV[0], pixelLimitsV[1]):
-                # uc = u - centerU
-                # vc = v - centerV
+        if pixelLimitsU[0] == pixelLimitsU[1] or pixelLimitsV[0] == pixelLimitsV[1]:
+            continue
 
-                # pixelDistanceSquared = (starPointingUV[0] - uc) ** 2 + (starPointingUV[1] - vc) ** 2
-                pixelDistanceSquared = (starPointingUV[0] - (u - centerU)) ** 2 + (starPointingUV[1] - (v - centerV)) ** 2
-                intensity = flux * point_spread_function_gaussian(0.0, 1.0, pixelDistanceSquared, diffractionLimitPx)
-                img_array[v][u] += intensity * color
+        color = np.array([catalog_subset[i][13], catalog_subset[i][14], catalog_subset[i][15]])
+        indicesU, indicesV = np.meshgrid(range(pixelLimitsU[0], pixelLimitsU[1]), range(pixelLimitsV[0], pixelLimitsV[1]))
+        img_array[pixelLimitsV[0]:pixelLimitsV[1], pixelLimitsU[0]:pixelLimitsU[1]] = \
+            draw_star(img_array[pixelLimitsV[0]:pixelLimitsV[1], pixelLimitsU[0]:pixelLimitsU[1]], 
+                      indicesU, indicesV, starPointingUV, centerU, centerV, diffractionLimitPx, flux, color)
+        # for u in range(pixelLimitsU[0], pixelLimitsU[1]):
+        #     for v in range(pixelLimitsV[0], pixelLimitsV[1]):
+        #         # uc = u - centerU
+        #         # vc = v - centerV
+
+        #         # pixelDistanceSquared = (starPointingUV[0] - uc) ** 2 + (starPointingUV[1] - vc) ** 2
+        #         pixelDistanceSquared = (starPointingUV[0] - (u - centerU)) ** 2 + (starPointingUV[1] - (v - centerV)) ** 2
+        #         intensity = flux * point_spread_function_gaussian(0.0, 1.0, pixelDistanceSquared, diffractionLimitPx)
+        #         img_array[v][u] += intensity * color
 
     # Render planets
     # planetsInView, planetColors = get_planets_in_frame(cameraPos, T_ICRFCamera, etNow, fieldOfViewU, fieldOfViewV, correctionMode=0, toleranceDegrees=1.0)
