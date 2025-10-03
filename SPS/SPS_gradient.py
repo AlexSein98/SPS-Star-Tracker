@@ -7,6 +7,8 @@ import sys
 import os
 import csv
 import copy
+import time
+import datetime
 
 from matplotlib import pyplot as plt
 import matplotlib
@@ -79,6 +81,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
     
     # Very basic error handling if datasets are not the same length
     if not (len(truthData) == len(estData) == len(latLonData)):
+        print(f'Warning: early exit due to dataset length mismatch; truthData length = {len(truthData)}, estData length = {len(estData)}, and latLonData length = {len(latLonData)}.')
         return
 
     maxDegree: int = globalConfig.grav_maxDegree
@@ -100,12 +103,19 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
 
     scaleFactor = 1000.0 if planet.demUnits == "km" else 1.0
 
+    startTime = time.perf_counter()
+    elapsedSeconds: float = 0.0
+    printInterval: int = 10
+
     for j in range(L):
+        doPrint: bool = j % printInterval == 0
+
         truth_j = truthData[j]
         est_j = estData[j]
         latLon_j = latLonData[j]
         
         if est_j[0] == 999 or est_j[1] == 999 or est_j[2] == 999 or est_j[3] == 999:
+            print(f'Warning: skipped measurement at index {j} (invalid quaternion).')
             continue
         
         q_real = Quaternion(truth_j[0], truth_j[1], truth_j[2], truth_j[3]).normalize()
@@ -132,15 +142,15 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
         if planet.planetName == "EARTH":
                 alt2 = max(alt2, 0.0)
         r_coarse_3 = planetographic_to_cartesian(phi_pg, lon2, alt2, gravModel.radius, gravModel.polarRadius)
-
-        if j % 100 == 0:
-            print(f'lat = {phi_pg}')
-            print(f'lon = {lon2}')
-            print(f'alt = {alt2}')
-
-            print(f'||r_coarse_1||   = {np.linalg.norm(r_coarse_1)}')
-            print(f'||r_coarse_2||   = {np.linalg.norm(r_coarse_2)}')
-            print(f'||r_coarse_3||   = {np.linalg.norm(r_coarse_3)}')
+        
+        if doPrint:
+            print(f'Sample point {j}:')
+            # print(f'lat = {phi_pg}')
+            # print(f'lon = {lon2}')
+            # print(f'alt = {alt2}')
+            # print(f'||r_coarse_1||   = {np.linalg.norm(r_coarse_1)}')
+            # print(f'||r_coarse_2||   = {np.linalg.norm(r_coarse_2)}')
+            # print(f'||r_coarse_3||   = {np.linalg.norm(r_coarse_3)}')
         
         #"""
         r_hat_i_plus_1 = copy.deepcopy(r_coarse_3)
@@ -157,9 +167,6 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
         tol: float = planet.radius * 1e-6  # m
         dr: np.ndarray[float] = np.zeros(3)
         dr_prev: np.ndarray[float] = 2.0 * tol * np.ones(3)
-
-        if j % 100 == 0:
-            print(f'Sample point {j}:')
         
         latTruth = float(latLon_j[0])
         lonTruth = float(latLon_j[1])
@@ -190,7 +197,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
             dg = g - g_est
 
             dr = G_inv @ dg
-            r_hat_i_plus_1 = r_hat_i - dr
+            r_hat_i_plus_1 = r_hat_i - 0.5 * dr
 
             # r_hat_i_plus_1 = SnapToSurface(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius, dem)
 
@@ -201,13 +208,14 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
             
             r_hat_i_plus_1 = planetographic_to_cartesian(phi_pg, lon, alt, gravModel.radius, gravModel.polarRadius)
             
+            # This shouldn't happen anymore? But it is???
             if i > 100:
                 print(f'    Run {i} dr = {np.round(dr, 3)} m')
             
-            if j % 100 == 0:
+            if doPrint:
                 print(f'    Run {i} r    = {np.round(r_hat_i_plus_1, 3)} m, phi_pc = {round(phi_pc, 6)}, phi_pg = {round(phi_pg_test, 6)}')
 
-        if j % 100 == 0:
+        if doPrint:
             print(f'Estimated lat = {round(phi_pg, 6)} deg')
             print(f'Estimated lon = {round(lon, 6)} deg')
             print(f'True lat = {round(latTruth, 6)} deg')
@@ -243,9 +251,15 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
         distanceErrorArray_km[latIdx, lonIdx] = distanceErr_km if distanceErr_km < limit_km else limit_km
         
         percentComplete = round(100.0 * float(j) / float(L), 3)
-        i = 0
-        if j % 100 == 0:
-            print(f'Sample {j}/{L} after {i} iterations ({percentComplete} %): Distance error = {round(distanceErr_m, 1)} m\n')
+        
+        endTime = time.perf_counter()
+        elapsedSeconds = endTime - startTime
+        elapsedTime = datetime.timedelta(seconds=round(elapsedSeconds))
+
+        if doPrint:
+            print(f'Sample {j}/{L} after {i} iterations ({percentComplete} %): Distance error = {round(distanceErr_m, 1)} m')
+            print(f'Elapsed time: {elapsedTime}')
+            print("------------------------------------------------------------------------------------------------------\n")
     
     # Calculate statistics
     mean = np.mean(distanceErrors_m)
@@ -253,12 +267,13 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
     std = np.std(distanceErrors_m)
 
     # Print statistics
-    print("")
+    print("======================================================================================================")
     print(f'Mean                    = {round(mean, 1)} m')
     print(f'Median                  = {round(median, 1)} m')
     print(f'Standard Deviation      = {round(std, 1)} m')
     print(f'Minimum                 = {round(min(distanceErrors_m), 3)} m = {round(min(distanceErrors_km), 6)} km')
     print(f'Maximum                 = {round(max(distanceErrors_m), 3)} m = {round(max(distanceErrors_km), 6)} km')
+    print(f'Total elapsed time: {elapsedTime}')
 
     # Plot histogram and box plot of errors
     fig = plt.figure()

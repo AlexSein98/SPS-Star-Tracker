@@ -89,8 +89,8 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
         latIdx = int(numLat * (90.0 - latTruth) / 180.0)
         lonIdx = int(numLon * (lonTruth + 180.0) / 360.0)
 
-        print(f'latIdx = {latIdx}')
-        print(f'lonIdx = {lonIdx}\n')
+        # print(f'latIdx = {latIdx}')
+        # print(f'lonIdx = {lonIdx}\n')
 
         errorsArcsecArray[latIdx, lonIdx] = phi_arcsec if phi_arcsec < reject else reject
 

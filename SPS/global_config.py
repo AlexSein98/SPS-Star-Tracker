@@ -24,14 +24,14 @@ _planets = [_earth, _moon, _mars]
 ##################################
 ####    SELECT PLANET HERE    ####
 # _planetIdx = 0  # Earth
-# _planetIdx = 1  # Moon
-_planetIdx = 2  # Mars
+_planetIdx = 1  # Moon
+# _planetIdx = 2  # Mars
 # _planetIdx = 3  # Phobos (WIP)
 ##################################
 
 _planet = _planets[_planetIdx]
 
-_numLon: int = 36
+_numLon: int = 180
 _numLat: int = int(0.5 * _numLon - 1)
 
 _grav_maxDegree: int = 32

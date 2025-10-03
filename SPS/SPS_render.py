@@ -3,6 +3,8 @@ from SPS.global_config import *
 
 import os
 import sys
+import time
+import datetime
 
 
 if __name__ == "__main__":
@@ -38,7 +40,7 @@ if __name__ == "__main__":
     # Star rendering parameters
     relativeMagnitude = 6.0  # "full" exposure is set for stars of this magnitude
     relativeFlux = 1.0  # flux for fully-exposed stars
-    starMaxPixelRadius = 16
+    starMaxPixelRadius = 2
 
     # Astrophysical parameters
     spice.furnsh(home + "data/metakernel.txt")
@@ -64,11 +66,14 @@ if __name__ == "__main__":
     radiusEquatorial: float = gravModel.radius
     radiusPolar: float = gravModel.polarRadius
     planetPos, _ = spice.spkpos(planet.planetName, etNow, "J2000", "NONE", "SSB")
+    Omega = np.array([0.0, 0.0, gravModel.omega])
 
-    for i in range(len(latLonAlts)):
-        # lat = latLonAlts[i][0]
-        # lon = latLonAlts[i][1]
-        # alt = latLonAlts[i][2]
+    startTime = time.perf_counter()
+    elapsedSeconds: float = 0.0
+    printInterval: int = 10
+
+    for i in range(numImages):
+        doPrint: bool = i % printInterval == 0
 
         phi_pg: float = latLonAlts[i][0]
         lon: float = latLonAlts[i][1]
@@ -79,7 +84,6 @@ if __name__ == "__main__":
 
         phi_pc, _, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
         g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(cameraPosPlanetFixed), maxDegree, overrideSphericalHarmonics=False, includeThirdBody=False, et=etNow)
-        Omega = np.array([0.0, 0.0, gravModel.omega])
         g -= np.cross(Omega, np.cross(Omega, cameraPosPlanetFixed))  # Handle being on the surface of the Earth
 
         gInertial = (planetRot.T @ np.array([g]).T).T[0]
@@ -87,19 +91,44 @@ if __name__ == "__main__":
 
         cameraPos = planetPos + 0.001 * cameraPosPlanetCentered  # needs to be in km
 
-        print(f'Lat = {phi_pg}, lon = {lon}:')
-        print(f'cameraPosPlanetFixed = {cameraPosPlanetFixed} m')
-        print(f'cameraPos (SSB) = {cameraPos} km\n')
+        # if doPrint:
+        #     print(f'Lat = {phi_pg}, lon = {lon}:')
+        #     print(f'cameraPosPlanetFixed = {cameraPosPlanetFixed} m')
+        #     print(f'cameraPos (SSB) = {cameraPos} km\n')
 
         # Render
         idx += 1
-        print(f'Rendering image {idx} of {numImages} ({round(100.0 * float(idx) / numImages, 2)}%): RA = {round(ra, 3)}, Dec = {round(de, 3)}')
+
+        if doPrint:
+            print(f'Rendering image {idx} of {numImages} ({round(100.0 * float(idx) / numImages, 2)}%): RA = {round(ra, 3)}, Dec = {round(de, 3)}')
         params = RenderParams(idx, etJ2000, etNow, cameraPos, dimU, dimV, fovU, starMaxPixelRadius, 
                               catalog, relativeMagnitude, relativeFlux, planet)
         
         # Actually do the render
         render(ra, de, params, home)
         true_data.append(get_true_attitude(ra, de))
+
+        endTime = time.perf_counter()
+        elapsedSeconds = endTime - startTime
+        elapsedTime = datetime.timedelta(seconds=round(elapsedSeconds))
+
+        if doPrint:
+            projectedRemainingSeconds: float = elapsedSeconds * float(len(latLonAlts) - idx) / float(idx)
+            projectedRemainingTime = datetime.timedelta(seconds=round(projectedRemainingSeconds))
+            print(f'Elapsed time: {elapsedTime}. Remaining time estimate: {projectedRemainingTime}\n')
     
     # Write output
     write_csv(home + "truth_data_" + planet.planetName.title() + ".csv", true_data)
+
+    # Timing stuff
+    secondsPerImage = elapsedSeconds / float(len(latLonAlts))
+    numImages_higherRes: int = 16020  # for [180 x 89] planet resolution
+    extrapolatedSeconds = secondsPerImage * float(numImages_higherRes)
+    extrapolatedTime = datetime.timedelta(seconds=round(extrapolatedSeconds))
+
+    secondsPerImageText = f'({round(secondsPerImage, 3)} seconds per image)'
+    finalTimingInfo = f'{elapsedTime} for {len(latLonAlts)} images ' + secondsPerImageText
+    timeForMoreImages = f'{extrapolatedTime}'
+
+    print(f'Render complete; total time: ' + finalTimingInfo)
+    print(f'Projected time for {numImages_higherRes} images: {extrapolatedTime}')
