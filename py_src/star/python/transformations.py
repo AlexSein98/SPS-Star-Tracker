@@ -240,10 +240,14 @@ def clamp(val, low, high):
 
 class Quaternion:
     def __init__(self, w: float, x: float, y: float, z: float):
-        self.w = w
-        self.x = x
-        self.y = y
-        self.z = z
+        # Ensure normalized quaternion on init
+        norm = np.sqrt(w ** 2 + x ** 2 + y ** 2 + z ** 2)
+        norm_1 = 1.0 / norm
+
+        self.w = w * norm_1
+        self.x = x * norm_1
+        self.y = y * norm_1
+        self.z = z * norm_1
     
     @classmethod
     def FromMatrix(quat, m: np.ndarray[float]):
@@ -306,6 +310,7 @@ class Quaternion:
         return quat(q[0], q[1], q[2], q[3])
 
     def mult(self, other):
+        other = other.normalize()
         w1 = self.w
         x1 = self.x
         y1 = self.y
@@ -317,7 +322,7 @@ class Quaternion:
         return Quaternion(w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
                           w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
                           w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-                          w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
+                          w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2).normalize()
     
     def normalize(self):
         mag_1 = 1.0 / np.sqrt(self.w ** 2 + self.x ** 2 + self.y ** 2 + self.z ** 2)
@@ -375,7 +380,7 @@ class Quaternion:
 if __name__ == "__main__":
     os.system('cls')
     np.set_printoptions(suppress=True)
-    testMode = 2
+    testMode = 3
 
     # For Space Teams University Competition 3
     # if testMode == 0:
@@ -433,3 +438,24 @@ if __name__ == "__main__":
 
     #     print(f'Difference: {xyz_pg - xyz_pc} m')
     #     print(f'Difference norm: {np.linalg.norm(xyz_pg - xyz_pc)} m')
+
+    # if testMode == 3:
+    #     r = np.array([2193075.113333, 743921.623579, -2485679.376025])
+    #     R_mars = 3396190.0
+    #     lat, lon, alt = r_to_latlonalt(r, R_mars)
+    #     T = latlon_to_T(lat, lon) @ T2(np.pi / 2.0)
+    #     q_lla: Quaternion = Quaternion.FromMatrix(T.T)
+    #     q_x90 = Quaternion(0.7071068, 0.7071068, 0.0, 0.0).normalize()
+    #     q_y90 = Quaternion(0.7071068, 0.0, -0.7071068, 0.0).normalize()
+    #     q_z90 = Quaternion(0.7071068, 0.0, 0.0, 0.7071068).normalize()
+
+    #     q_NED = q_x90.mult(q_lla)
+
+    #     # print(f'lat = {round(lat, 6)}, lon = {round(lon, 6)}\n')
+    #     # print(f'T = {T}\n')
+
+    #     print(f'q_lla = [w={q_lla.w:.6f}, x={q_lla.x:.6f}, y={q_lla.y:.6f}, z={q_lla.z:.6f}]\n')
+    #     print(f'q_x90 = [w={q_x90.w:.6f}, x={q_x90.x:.6f}, y={q_x90.y:.6f}, z={q_x90.z:.6f}]')
+    #     print(f'q_y90 = [w={q_y90.w:.6f}, x={q_y90.x:.6f}, y={q_y90.y:.6f}, z={q_y90.z:.6f}]')
+    #     print(f'q_z90 = [w={q_z90.w:.6f}, x={q_z90.x:.6f}, y={q_z90.y:.6f}, z={q_z90.z:.6f}]\n')
+    #     print(f'q_NED = [w={q_NED.w:.6f}, x={q_NED.x:.6f}, y={q_NED.y:.6f}, z={q_NED.z:.6f}]')
