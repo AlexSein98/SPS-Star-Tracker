@@ -1,6 +1,7 @@
 from SPS.grav_earth_GGM05 import *
 from SPS.grav_moon_GRAIL150 import *
 from SPS.grav_mars_MRO110B2 import *
+from SPS.grav_phobos_basic import *
 from py_src.star.python.transformations import *
 
 import pyshtools as sh
@@ -182,7 +183,8 @@ class GravSampler:
 
         return DeltaLatLon(lla, llaPlusX, llaMinusX, llaPlusY, llaMinusY, llaPlusZ, llaMinusZ)
     
-    def SampleGradient_Numerical(self, xyz: np.ndarray[float], maxDegree: float, dXYZ: float) -> np.ndarray[float]:
+    def SampleGradient_Numerical(self, xyz: np.ndarray[float], maxDegree: float, 
+                                 dXYZ: float, includeThirdBody: bool = False) -> np.ndarray[float]:
         """
         Latitude and longitude must be in degrees! dXYZ must be in the same units as r.
         """
@@ -212,12 +214,12 @@ class GravSampler:
         # phi_pg_pZ, _, _ = cartesian_to_planetographic(xyz_pZ, self.gravModel.radius, self.gravModel.polarRadius)
         # phi_pg_mZ, _, _ = cartesian_to_planetographic(xyz_mZ, self.gravModel.radius, self.gravModel.polarRadius)
 
-        dg_dx_p = self.SampleAcceleration_Custom(lat_pX, lon_pX, alt_pX + self.gravModel.radius, maxDegree)
-        dg_dx_m = self.SampleAcceleration_Custom(lat_mX, lon_mX, alt_mX + self.gravModel.radius, maxDegree)
-        dg_dy_p = self.SampleAcceleration_Custom(lat_pY, lon_pY, alt_pY + self.gravModel.radius, maxDegree)
-        dg_dy_m = self.SampleAcceleration_Custom(lat_mY, lon_mY, alt_mY + self.gravModel.radius, maxDegree)
-        dg_dz_p = self.SampleAcceleration_Custom(lat_pZ, lon_pZ, alt_pZ + self.gravModel.radius, maxDegree)
-        dg_dz_m = self.SampleAcceleration_Custom(lat_mZ, lon_mZ, alt_mZ + self.gravModel.radius, maxDegree)
+        dg_dx_p = self.SampleAcceleration_Custom(lat_pX, lon_pX, alt_pX + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
+        dg_dx_m = self.SampleAcceleration_Custom(lat_mX, lon_mX, alt_mX + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
+        dg_dy_p = self.SampleAcceleration_Custom(lat_pY, lon_pY, alt_pY + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
+        dg_dy_m = self.SampleAcceleration_Custom(lat_mY, lon_mY, alt_mY + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
+        dg_dz_p = self.SampleAcceleration_Custom(lat_pZ, lon_pZ, alt_pZ + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
+        dg_dz_m = self.SampleAcceleration_Custom(lat_mZ, lon_mZ, alt_mZ + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
         
         # phi_pc, lon, _ = r_to_latlonalt(xyz, self.gravModel.radius)
         # phi_pg, _, alt = cartesian_to_planetographic(xyz, self.gravModel.radius, self.gravModel.polarRadius)

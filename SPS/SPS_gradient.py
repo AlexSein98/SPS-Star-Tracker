@@ -96,7 +96,8 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
     numLat: int = int(float(L) / float(numLon))
     distanceErrorArray_m: np.ndarray[float] = np.zeros((numLat, numLon))
     distanceErrorArray_km: np.ndarray[float] = np.zeros((numLat, numLon))
-    limit_km: float = 20 * planet.radius * 1e-6
+    # limit_km: float = 20 * planet.radius * 1e-6
+    limit_km: float = 20.0
 
     # Gravity gradient grid:
     # Gxx, Gyy, Gzz, Gxy, Gxz, Gyz = sampler.GetGradientGrid(maxDegree)
@@ -164,7 +165,8 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
         # Gradient method:
         i: int = 0
 
-        tol: float = planet.radius * 1e-6  # m
+        # tol: float = planet.radius * 1e-6  # m
+        tol: float = 10.0  # m
         dr: np.ndarray[float] = np.zeros(3)
         dr_prev: np.ndarray[float] = 2.0 * tol * np.ones(3)
         
@@ -181,14 +183,14 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
             # Gravitational acceleration:
             phi_pc, _, _ = r_to_latlonalt(r_hat_i, gravModel.radius)
             phi_pg_test, _, _ = cartesian_to_planetographic(r_hat_i, gravModel.radius, gravModel.polarRadius)
-            g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(r_hat_i), maxDegree)
+            g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(r_hat_i), maxDegree, includeThirdBody=True)
             # g += np.cross(Omega, np.cross(Omega, r_hat_i))
 
             # Gradient
             # dXYZ: float = gravModel.radius * 0.5e-3  # m
-            dXYZ: float = 1000.0  # m
+            dXYZ: float = 50.0  # m
             # G: np.ndarray[float] = sampler.SampleGradient(lat, lon, gravModel.radius + alt, maxDegree, dXYZ)
-            G = sampler.SampleGradient_Numerical(r_hat_i, maxDegree, dXYZ)
+            G = sampler.SampleGradient_Numerical(r_hat_i, maxDegree, dXYZ, includeThirdBody=True)
             # G = sampler.InterpolateGradientGrid(phi_pc, lon, Gxx, Gyy, Gzz, Gxy, Gxz, Gyz)
             G_inv = np.linalg.inv(G)
 
@@ -197,7 +199,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
             dg = g - g_est
 
             dr = G_inv @ dg
-            r_hat_i_plus_1 = r_hat_i - 0.5 * dr
+            r_hat_i_plus_1 = r_hat_i - 0.1 * dr
 
             # r_hat_i_plus_1 = SnapToSurface(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius, dem)
 
@@ -209,7 +211,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
             r_hat_i_plus_1 = planetographic_to_cartesian(phi_pg, lon, alt, gravModel.radius, gravModel.polarRadius)
             
             # This shouldn't happen anymore? But it is???
-            if i > 100:
+            if i > 1000:
                 print(f'    Run {i} dr = {np.round(dr, 3)} m')
             
             if doPrint:

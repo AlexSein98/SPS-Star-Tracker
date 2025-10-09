@@ -83,7 +83,8 @@ if __name__ == "__main__":
         cameraPosPlanetCentered = (planetRot.T @ np.array([cameraPosPlanetFixed]).T).T[0]
 
         phi_pc, _, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
-        g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(cameraPosPlanetFixed), maxDegree, overrideSphericalHarmonics=False, includeThirdBody=False, et=etNow)
+        g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(cameraPosPlanetFixed), maxDegree, 
+                                              overrideSphericalHarmonics=False, includeThirdBody=True, et=etNow)
         g -= np.cross(Omega, np.cross(Omega, cameraPosPlanetFixed))  # Handle being on the surface of the Earth
 
         gInertial = (planetRot.T @ np.array([g]).T).T[0]
