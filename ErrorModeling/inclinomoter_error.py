@@ -39,7 +39,7 @@ def output_to_deg(output, is_error):
 # initialize varaibles
 theta_i = random.gauss(mu=0, sigma=0.5)
 iterations = 2000
-timespan = 24 * 3600
+timespan = 24 * 360
 timestep = 100
 
 Temperature = 50
