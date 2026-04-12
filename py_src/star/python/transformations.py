@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 import os
 import copy
 
@@ -11,37 +12,37 @@ class UniversalConstants:
     alpha = 0.0072973525693     # fine structure constant (unitless!)
 
 
-def T1(angle: float) -> np.ndarray[float]:
+def T1(angle: float) -> npt.NDArray:
     return np.array([[1.0, 0.0, 0.0],
                      [0.0, np.cos(angle), np.sin(angle)],
                      [0.0, -np.sin(angle), np.cos(angle)]])
                      
 
-def T2(angle: float) -> np.ndarray[float]:
+def T2(angle: float) -> npt.NDArray:
     return np.array([[np.cos(angle), 0.0, -np.sin(angle)],
                      [0.0, 1.0, 0.0],
                      [np.sin(angle), 0.0, np.cos(angle)]])
                      
 
-def T3(angle: float) -> np.ndarray[float]:
+def T3(angle: float) -> npt.NDArray:
     return np.array([[np.cos(angle), np.sin(angle), 0.0],
                      [-np.sin(angle), np.cos(angle), 0.0],
                      [0.0, 0.0, 1.0]])
 
 
-def R1(angle: float) -> np.ndarray[float]:
+def R1(angle: float) -> npt.NDArray:
     return T1(angle).T
 
 
-def R2(angle: float) -> np.ndarray[float]:
+def R2(angle: float) -> npt.NDArray:
     return T2(angle).T
 
 
-def R3(angle: float) -> np.ndarray[float]:
+def R3(angle: float) -> npt.NDArray:
     return T3(angle).T
 
 
-def normalize(vec: np.ndarray[float]) -> np.ndarray[float]:
+def normalize(vec: npt.NDArray) -> npt.NDArray:
     mag = np.linalg.norm(vec)
     if mag > 0.0:
         return vec / np.linalg.norm(vec)
@@ -49,23 +50,23 @@ def normalize(vec: np.ndarray[float]) -> np.ndarray[float]:
         return vec
 
 
-def r_hat_to_ra_dec(r_hat: np.ndarray[float]):
+def r_hat_to_ra_dec(r_hat: npt.NDArray):
     ra = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
     dec = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
     return ra, dec
 
 
-def r_hat_to_latlon(r_hat: np.ndarray[float]):
+def r_hat_to_latlon(r_hat: npt.NDArray):
     lat = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
     lon = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
     return lat, lon
 
 
-def r_to_latlonalt(r: np.ndarray[float], R: float) -> tuple[float, float, float]:
+def r_to_latlonalt(r: npt.NDArray, R: float) -> tuple[float, float, float]:
     r_hat = normalize(r)
-    lat = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
-    lon = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
-    alt = np.linalg.norm(r) - R
+    lat: float = np.rad2deg(np.arcsin(r_hat[2] / np.linalg.norm(r_hat)))
+    lon: float = np.rad2deg(np.arctan2(r_hat[1], r_hat[0]))
+    alt: float = float(np.linalg.norm(r) - R)
     return lat, lon, alt
 
 
@@ -73,12 +74,12 @@ def latlon_to_T(lat: float, lon: float):
     return R3(np.deg2rad(lon)) @ R2(np.deg2rad(-lat))
 
 
-def T_to_latlon(T: np.ndarray[float]):
+def T_to_latlon(T: npt.NDArray):
     r_hat = T[:, 0]
     return r_hat_to_latlon(r_hat)
 
 
-def planetographic_to_cartesian(lat: float, lon: float, alt: float, a: float, b: float) -> np.ndarray[float]:
+def planetographic_to_cartesian(lat: float, lon: float, alt: float, a: float, b: float) -> npt.NDArray:
     lat_rad: float = np.deg2rad(lat)
     lon_rad: float = np.deg2rad(lon)
     N: float = a ** 2 / np.sqrt(a ** 2 * np.cos(lat_rad) ** 2 + b ** 2 * np.sin(lat_rad) ** 2)
@@ -88,7 +89,7 @@ def planetographic_to_cartesian(lat: float, lon: float, alt: float, a: float, b:
     return np.array([x, y, z])
 
 
-def cartesian_to_planetographic(xyz: np.ndarray[float], a: float, b: float) -> tuple[float, float, float]:
+def cartesian_to_planetographic(xyz: npt.NDArray, a: float, b: float) -> tuple[float, float, float]:
     # From Vallado, Fundamentals of Astrodynamics and Applications 4th edition, Algorithm 12: "ECEF To LatLon"
     x: float = xyz[0]
     y: float = xyz[1]
@@ -129,7 +130,7 @@ def cartesian_to_planetographic(xyz: np.ndarray[float], a: float, b: float) -> t
 #     return np.rad2deg(phi_pc)
 
 
-def T_angle_axis(angle: float, axis: np.ndarray[float]) -> np.ndarray[float]:
+def T_angle_axis(angle: float, axis: npt.NDArray) -> npt.NDArray:
     e_cross = np.array([[0.0, -axis[2], axis[1]], 
                         [axis[2], 0.0, -axis[0]], 
                         [-axis[1], axis[0], 0.0]])
@@ -155,8 +156,8 @@ def RADecRoll_to_Camera(RA: float, dec: float, roll: float):
     return R3(np.deg2rad(RA)) @ R2(np.deg2rad(-dec)) @ R1(np.deg2rad(roll))
 
 
-def AttitudeError(T_true: np.ndarray[float], T_est: np.ndarray[float]) -> float:
-    delta_T: np.ndarray[float] = T_true @ T_est.T
+def AttitudeError(T_true: npt.NDArray, T_est: npt.NDArray) -> float:
+    delta_T: npt.NDArray = T_true @ T_est.T
     return np.rad2deg(np.arccos(0.5 * (np.trace(delta_T) - 1.0)))
 
 
@@ -205,21 +206,21 @@ def rad_to_pixel(rad: float, fieldOfViewU: float, U: int) -> float:
     return float(U) * np.rad2deg(rad) / fieldOfViewU
 
 
-def camera_to_world(T_worldToCamera: np.ndarray[float], vec: np.ndarray[float]):
+def camera_to_world(T_worldToCamera: npt.NDArray, vec: npt.NDArray):
     return (T_worldToCamera.T @ vec)
 
 
-def world_to_camera(T_worldToCamera: np.ndarray[float], vec: np.ndarray[float]):
+def world_to_camera(T_worldToCamera: npt.NDArray, vec: npt.NDArray):
     return (T_worldToCamera @ np.array([vec]).T).T[0]
 
 
-def camera_to_uv_centered(fieldOfViewU: float, fieldOfViewV: float, U: float, V: float, vec: np.ndarray[float]) -> np.ndarray[float]:
+def camera_to_uv_centered(fieldOfViewU: float, fieldOfViewV: float, U: float, V: float, vec: npt.NDArray) -> npt.NDArray:
     u = -0.5 * U * vec[1] / (vec[0] * np.tan(0.5 * np.deg2rad(fieldOfViewU)))
     v = -0.5 * V * vec[2] / (vec[0] * np.tan(0.5 * np.deg2rad(fieldOfViewV)))
     return np.array([u, v, 1.0])
 
 
-def uv_centered_to_camera(fieldOfViewU: float, fieldOfViewV: float, U: float, V: float, uc: float, vc: float) -> np.ndarray[float]:
+def uv_centered_to_camera(fieldOfViewU: float, fieldOfViewV: float, U: float, V: float, uc: float, vc: float) -> npt.NDArray:
     px = 1.0
     py = -2.0 * uc * px * np.tan(0.5 * np.deg2rad(fieldOfViewU)) / U
     pz = -2.0 * vc * px * np.tan(0.5 * np.deg2rad(fieldOfViewV)) / V
@@ -250,7 +251,7 @@ class Quaternion:
         self.z = z * norm_1
     
     @classmethod
-    def FromMatrix(quat, m: np.ndarray[float]):
+    def FromMatrix(cls, m: npt.NDArray):
         r__ = np.array([m[0, 0], m[0, 1], m[0, 2], 
                         m[1, 0], m[1, 1], m[1, 2], 
                         m[2, 0], m[2, 1], m[2, 2]])
@@ -307,7 +308,10 @@ class Quaternion:
             q[2] = -s[1]
             q[3] = -s[2]
         
-        return quat(q[0], q[1], q[2], q[3])
+        cls.w = q[0]
+        cls.x = q[1]
+        cls.y = q[2]
+        cls.z = q[3]
 
     def mult(self, other):
         other = other.normalize()

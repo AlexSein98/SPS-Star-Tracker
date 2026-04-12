@@ -141,7 +141,7 @@ def planet_magnitude(planetName: str, pos_ObsSSB: np.ndarray[float], et: float, 
             phaseIntegral = 0.026 + 2.446e-4 * phaseAngle + 2.672e-4 * phaseAngle ** 2 - 1.505e-6 * phaseAngle ** 3 + 4.767e-9 * phaseAngle ** 4
     elif planetName == "URANUS":
         if phaseAngle < 3.1:
-            uranusUpAxis = spice.pxform("J2000", "IAU_SATURN", et)[:, 2]
+            uranusUpAxis = spice.pxform("J2000", "IAU_URANUS", et)[:, 2]
             fUranus = 0.0022927  # flattening coefficient
             phiView = 90.0 - np.rad2deg(np.arccos(np.dot(-normalize(pos_PlanetObs), uranusUpAxis)))
             phiS = 90.0 - np.rad2deg(np.arccos(np.dot(normalize(pos_SunPlanet), uranusUpAxis)))

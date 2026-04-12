@@ -12,9 +12,12 @@ import spiceypy as spice
 import math
 from decimal import Decimal
 
+import numpy.typing as npt
+
 
 class Planet:
-    def __init__(self, planetName: str, demName: str, demUnits: str, radius_m: float, planetFrame: str, gravModel: grav_base):
+    def __init__(self, planetName: str, demName: str, demUnits: str, 
+                 radius_m: float, planetFrame: str, gravModel: grav_base):
         self.planetName = planetName
         self.demName = demName
         self.demUnits = demUnits
@@ -53,7 +56,7 @@ class GravSampler:
     
     def SampleAcceleration(self, lat: float, lon: float, r: float, maxDegree: float, 
                            overrideSphericalHarmonics: bool = False, noRadialTerm: bool = False,
-                           includeThirdBody: bool = False, et: float = 0.0) -> np.ndarray[float]:
+                           includeThirdBody: bool = False, et: float = 0.0) -> npt.NDArray:
         """
         Latitude and longitude must be in degrees!
         """
@@ -92,14 +95,14 @@ class GravSampler:
 
             muResult = spice.bodvrd(name, "GM", 1)
             mu: float = muResult[1][0] * 1e9
-            r_sat_body: np.ndarray[float] = pos_m - T_centralBody.T @ pos_surface
+            r_sat_body: npt.NDArray = pos_m - T_centralBody.T @ pos_surface
             g_inertial = mu * (r_sat_body / (np.linalg.norm(r_sat_body) ** 3) - pos_m / (np.linalg.norm(pos_m) ** 3))
             g_pcpf += T_centralBody @ g_inertial
         return g_pcpf
     
     def SampleAcceleration_Custom(self, lat: float, lon: float, r: float, maxDegree: float, 
                                   overrideSphericalHarmonics: bool = False, noRadialTerm: bool = False,
-                                  includeThirdBody: bool = False, et: float = 0.0) -> np.ndarray[float]:
+                                  includeThirdBody: bool = False, et: float = 0.0) -> npt.NDArray:
         """
         Latitude and longitude must be in degrees!
         """
@@ -143,7 +146,7 @@ class GravSampler:
 
             muResult = spice.bodvrd(name, "GM", 1)
             mu: float = muResult[1][0] * 1e9
-            r_sat_body: np.ndarray[float] = pos_m - T_centralBody.T @ posSurface
+            r_sat_body: npt.NDArray = pos_m - T_centralBody.T @ posSurface
             g_inertial = mu * (r_sat_body / (np.linalg.norm(r_sat_body) ** 3) - pos_m / (np.linalg.norm(pos_m) ** 3))
             g_pcpf += T_centralBody @ g_inertial
         return g_pcpf
@@ -183,10 +186,15 @@ class GravSampler:
 
         return DeltaLatLon(lla, llaPlusX, llaMinusX, llaPlusY, llaMinusY, llaPlusZ, llaMinusZ)
     
-    def SampleGradient_Numerical(self, xyz: np.ndarray[float], maxDegree: float, 
-                                 dXYZ: float, includeThirdBody: bool = False) -> np.ndarray[float]:
+    def SampleGradient_SphericalHarmonic(self, xyz: npt.NDArray, maxDegree: float) -> npt.NDArray:
+        G = np.identity(3)
+        return G
+
+
+    def SampleGradient_Numerical(self, xyz: npt.NDArray, maxDegree: float, 
+                                 dXYZ: float, includeThirdBody: bool = False) -> npt.NDArray:
         """
-        Latitude and longitude must be in degrees! dXYZ must be in the same units as r.
+        dXYZ must be in the same units as r.
         """
         # The gradient matrix is of form: 
         #   | dg/dx[0], dg/dy[0], dg/dz[0] |
@@ -207,48 +215,21 @@ class GravSampler:
         lat_pZ, lon_pZ, alt_pZ = r_to_latlonalt(xyz_pZ, self.gravModel.radius)
         lat_mZ, lon_mZ, alt_mZ = r_to_latlonalt(xyz_mZ, self.gravModel.radius)
 
-        # phi_pg_pX, _, _ = cartesian_to_planetographic(xyz_pX, self.gravModel.radius, self.gravModel.polarRadius)
-        # phi_pg_mX, _, _ = cartesian_to_planetographic(xyz_mX, self.gravModel.radius, self.gravModel.polarRadius)
-        # phi_pg_pY, _, _ = cartesian_to_planetographic(xyz_pY, self.gravModel.radius, self.gravModel.polarRadius)
-        # phi_pg_mY, _, _ = cartesian_to_planetographic(xyz_mY, self.gravModel.radius, self.gravModel.polarRadius)
-        # phi_pg_pZ, _, _ = cartesian_to_planetographic(xyz_pZ, self.gravModel.radius, self.gravModel.polarRadius)
-        # phi_pg_mZ, _, _ = cartesian_to_planetographic(xyz_mZ, self.gravModel.radius, self.gravModel.polarRadius)
-
         dg_dx_p = self.SampleAcceleration_Custom(lat_pX, lon_pX, alt_pX + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
         dg_dx_m = self.SampleAcceleration_Custom(lat_mX, lon_mX, alt_mX + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
         dg_dy_p = self.SampleAcceleration_Custom(lat_pY, lon_pY, alt_pY + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
         dg_dy_m = self.SampleAcceleration_Custom(lat_mY, lon_mY, alt_mY + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
         dg_dz_p = self.SampleAcceleration_Custom(lat_pZ, lon_pZ, alt_pZ + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
         dg_dz_m = self.SampleAcceleration_Custom(lat_mZ, lon_mZ, alt_mZ + self.gravModel.radius, maxDegree, includeThirdBody=includeThirdBody)
-        
-        # phi_pc, lon, _ = r_to_latlonalt(xyz, self.gravModel.radius)
-        # phi_pg, _, alt = cartesian_to_planetographic(xyz, self.gravModel.radius, self.gravModel.polarRadius)
-
-        # lat, lon, alt = r_to_latlonalt(xyz, self.gravModel.radius)
-        # deltaLatLon = self.DeltaXYZ_to_DeltaLatLon(LatLonAlt(lat, lon, alt), self.gravModel.radius, dXYZ)
-        
-        # llaPlusX = deltaLatLon.llaPlusX
-        # llaMinusX = deltaLatLon.llaMinusX
-        # llaPlusY = deltaLatLon.llaPlusY
-        # llaMinusY = deltaLatLon.llaMinusY
-        # llaPlusZ = deltaLatLon.llaPlusZ
-        # llaMinusZ = deltaLatLon.llaMinusZ
-        
-        # dg_dx_plus = self.SampleAcceleration(llaPlusX.lat, llaPlusX.lon, llaPlusX.alt + self.gravModel.radius, maxDegree, noRadialTerm=False)
-        # dg_dx_minus = self.SampleAcceleration(llaMinusX.lat, llaMinusX.lon, llaMinusX.alt + self.gravModel.radius, maxDegree, noRadialTerm=False)
-        # dg_dy_plus = self.SampleAcceleration(llaPlusY.lat, llaPlusY.lon, llaPlusY.alt + self.gravModel.radius, maxDegree, noRadialTerm=False)
-        # dg_dy_minus = self.SampleAcceleration(llaMinusY.lat, llaMinusY.lon, llaMinusY.alt + self.gravModel.radius, maxDegree, noRadialTerm=False)
-        # dg_dz_plus = self.SampleAcceleration(llaPlusZ.lat, llaPlusZ.lon, llaPlusZ.alt + self.gravModel.radius, maxDegree, noRadialTerm=False)
-        # dg_dz_minus = self.SampleAcceleration(llaMinusZ.lat, llaMinusZ.lon, llaMinusZ.alt + self.gravModel.radius, maxDegree, noRadialTerm=False)
 
         dXYZ_inv = 0.5 / dXYZ
-        dg_dx: np.ndarray[float] = dXYZ_inv * (dg_dx_p - dg_dx_m)
-        dg_dy: np.ndarray[float] = dXYZ_inv * (dg_dy_p - dg_dy_m)
-        dg_dz: np.ndarray[float] = dXYZ_inv * (dg_dz_p - dg_dz_m)
+        dg_dx: npt.NDArray = dXYZ_inv * (dg_dx_p - dg_dx_m)
+        dg_dy: npt.NDArray = dXYZ_inv * (dg_dy_p - dg_dy_m)
+        dg_dz: npt.NDArray = dXYZ_inv * (dg_dz_p - dg_dz_m)
 
         return np.array([dg_dx, dg_dy, dg_dz]).T
     
-    def GetGradientGrid(self, maxDegree: float) -> np.ndarray[float]:
+    def GetGradientGrid(self, maxDegree: float) -> npt.NDArray:
         mu = self.gravModel.mu
         R = self.gravModel.radius
         f = self.gravModel.flattening
@@ -257,7 +238,7 @@ class GravSampler:
             MakeGravGradGridDH(self.Cilm, mu, R, lmax=maxDegree, a=R, f=f, sampling=2, lmax_calc=maxDegree, extend=True)
         return Gxx, Gyy, Gzz, Gxy, Gxz, Gyz
     
-    def InterpolateGrid(self, grid: np.ndarray[float], _i_minus: int, _i_plus: int, _j_minus: int, _j_plus: int) -> float:
+    def InterpolateGrid(self, grid: npt.NDArray, _i_minus: int, _i_plus: int, _j_minus: int, _j_plus: int) -> float:
         """
         Internal use only!
         """
@@ -267,10 +248,10 @@ class GravSampler:
         sample_i_plus_j_plus = grid[_i_plus, _j_plus]
         return 0.25 * (sample_i_minus_j_minus + sample_i_plus_j_minus + sample_i_minus_j_plus + sample_i_plus_j_plus)
     
-    def InterpolateGradientGrid(self, lat: float, lon: float, Gxx: np.ndarray[float], 
-                                Gyy: np.ndarray[float], Gzz: np.ndarray[float], 
-                                Gxy: np.ndarray[float], Gxz: np.ndarray[float], 
-                                Gyz: np.ndarray[float]) -> np.ndarray[float]:
+    def InterpolateGradientGrid(self, lat: float, lon: float, Gxx: npt.NDArray, 
+                                Gyy: npt.NDArray, Gzz: npt.NDArray, 
+                                Gxy: npt.NDArray, Gxz: npt.NDArray, 
+                                Gyz: npt.NDArray) -> npt.NDArray:
         countLat = Gxx.shape[0]
         countLon = Gxx.shape[1]
         _i = countLat * (90.0 - lat) / 180.0
@@ -288,7 +269,7 @@ class GravSampler:
         Gxz_ij = self.InterpolateGrid(Gxz, _i_minus, _i_plus, _j_minus, _j_plus)
         Gyz_ij = self.InterpolateGrid(Gyz, _i_minus, _i_plus, _j_minus, _j_plus)
         
-        T: np.ndarray[float] = latlon_to_T(lat, lon)
+        T: npt.NDArray = latlon_to_T(lat, lon)
         # G_ij = np.array([[Gzz_ij, Gxz_ij, Gyz_ij], 
         #                  [Gxz_ij, Gxx_ij, Gxy_ij], 
         #                  [Gyz_ij, Gxy_ij, Gyy_ij]])
@@ -307,7 +288,7 @@ class GravSampler:
         PI_lm = self.NormalizationCoefficient(l, m)
         return Clm[l][m] / PI_lm
 
-    def CalculateAccelerationJ2(self, J2: float, gravModel: grav_base, r: np.ndarray[float]) -> np.ndarray[float]:
+    def CalculateAccelerationJ2(self, J2: float, gravModel: grav_base, r: npt.NDArray) -> npt.NDArray:
         x_r: float = r[0]
         y_r: float = r[1]
         z_r: float = r[2]
@@ -318,8 +299,8 @@ class GravSampler:
         a = np.array([a_x, a_y, a_z])
         return a
 
-    def HarmonicAcceleration(self, r: np.ndarray[float], gravModel: grav_base, 
-                             lat: float, lon: float, degree: int, order: int) -> np.ndarray[float]:
+    def HarmonicAcceleration(self, r: npt.NDArray, gravModel: grav_base, 
+                             lat: float, lon: float, degree: int, order: int) -> npt.NDArray:
         # initialize P matrix:
         size = degree + 1
         P = np.zeros((size, size))
@@ -381,3 +362,38 @@ class GravSampler:
         a_z = (dUdr / r_norm) * r[2] + (rho * dUdLat / r_squared)
 
         return np.array([a_x, a_y, a_z])
+
+    def HarmonicGradient(self, r: npt.NDArray, gravModel: grav_base, 
+                         lat: float, lon: float, degree: int, order: int) -> npt.NDArray:
+        # initialize P matrix:
+        size = degree + 1
+        P = np.zeros((size, size))
+
+        lat_r = np.deg2rad(lat)
+        lon_r = np.deg2rad(lon)
+
+        R = gravModel.radius
+        mu = gravModel.mu
+
+        r_norm = np.linalg.norm(r)
+        sinLat = np.sin(lat_r)
+        cosLat = np.cos(lat_r)
+        tanLat = np.tan(lat_r)
+        P[0][0] = 1.0
+        P[1][0] = sinLat
+        P[1][1] = cosLat
+
+        for l in range(2, size):
+            for m in range(0, size):
+                if m == 0 and l >= 2:
+                    P[l][m] = ((2 * l - 1) * sinLat * P[l - 1][0] - (l - 1) * P[l - 2][0]) / l
+                elif m != 0 and m < l:
+                    P[l][m] = P[l - 2][m] + (2 * l - 1) * cosLat * P[l - 1][m - 1]
+                elif l != 0 and m == l:
+                    P[l][m] = (2 * l - 1) * cosLat * P[l - 1][l - 1]
+
+        dUdr = 0.0
+        dUdLat = 0.0
+        dUdLon = 0.0
+
+        

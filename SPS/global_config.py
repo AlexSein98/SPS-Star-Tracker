@@ -25,9 +25,9 @@ _planets = [_earth, _moon, _mars, _phobos]
 ##################################
 ####    SELECT PLANET HERE    ####
 # _planetIdx = 0  # Earth
-# _planetIdx = 1  # Moon
+_planetIdx = 1  # Moon
 # _planetIdx = 2  # Mars
-_planetIdx = 3  # Phobos
+# _planetIdx = 3  # Phobos
 ##################################
 
 _planet = _planets[_planetIdx]
@@ -36,6 +36,6 @@ _numLon: int = 36
 _numLat: int = int(0.5 * _numLon - 1)
 
 _grav_maxDegree: int = 2
-_grav_maxOrder: int = 2
+_grav_maxOrder: int = 0
 
 globalConfig = GlobalConfig(_planet, _numLat, _numLon, _grav_maxDegree, _grav_maxOrder)

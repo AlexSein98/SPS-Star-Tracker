@@ -106,7 +106,8 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
 
     startTime = time.perf_counter()
     elapsedSeconds: float = 0.0
-    printInterval: int = 10
+    printInterval: int = 100
+    gradientWalkFactor: float = 0.5
 
     for j in range(L):
         doPrint: bool = j % printInterval == 0
@@ -199,7 +200,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, latLonDataPath: str,
             dg = g - g_est
 
             dr = G_inv @ dg
-            r_hat_i_plus_1 = r_hat_i - 0.1 * dr
+            r_hat_i_plus_1 = r_hat_i - gradientWalkFactor * dr
 
             # r_hat_i_plus_1 = SnapToSurface(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius, dem)
 

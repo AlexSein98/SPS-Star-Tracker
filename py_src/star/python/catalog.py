@@ -118,6 +118,9 @@ def read_json_catalog(catalogPath: str):
                 r, g, b = temp_to_rgb(temp)
 
             # Output for this star
+            # CATALOG INDEX MAP:
+            # 0     1       2       3       4           5 6 7   8 9 10      11      12    13 14 15
+            # RA    Dec     mu_RA   mu_Dec  parallax    p_hat   q_hat       vMag    T     RGB
             catalog.append([rightAscension, declination, properMotionRA, properMotionDE, parallax, pHat_i[0], pHat_i[1], pHat_i[2], qHat_i[0], qHat_i[1], qHat_i[2], vMag, temp, r, g, b])
         return catalog
 
@@ -141,10 +144,14 @@ def read_csv_catalog(catalogPath: str):
 
 def subset_catalog(catalog, indices):
     catalog_subset = []
-    for i in range(len(catalog)):
-        if i in indices:
-            catalog_subset.append(catalog[i])
+    for i in indices:
+        catalog_subset.append(catalog[i])
     return catalog_subset
+
+    # for i in range(len(catalog)):
+    #     if i in indices:
+    #         catalog_subset.append(catalog[i])
+    # return catalog_subset
 
 
 def subset_catalog_by_magnitude(catalog, magnitudeCutoff: float):
