@@ -49,6 +49,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
 ################################
 from array_transformations import check_axis_decorator
 from support_functions import timing_decorator
+import numpy.typing as npt
 
 ################################
 #USER INPUT
@@ -173,21 +174,21 @@ def ksearch(kvec, xin, d_thresh, d_cat, m, q):
 
     ncol = len(d_cat[0])-1
 
-    jbot = int(np.floor((ya-q)/m))
-    jtop = int(np.ceil((yb-q)/m))
+    jbot = int((np.floor((ya - q) / m)).item())
+    jtop = int((np.ceil((yb - q) / m)).item())
 
     # Guarantee that jbot and jtop remain within bounds of kvector
     jbot = min(max(jbot, 0), len(kvec)-1)
     jtop = min(jtop, len(kvec)-1)
 
     # Get the values of the angle between the two indices
-    d = d_cat[int(kvec[jbot]):int(kvec[jtop]-1), :]
+    d = d_cat[int(kvec[jbot].item()):int(kvec[jtop].item() - 1), :]
     # Remove the values that fall outside the range; see paper
     vfound = np.where(
         np.logical_and(
             d[:, ncol]+d_thresh >= xin,
             d[:, ncol]-d_thresh <= xin))[0]
-    matchid = np.array(d_cat[vfound+int(kvec[jbot]), 0]).astype(int)
+    matchid = np.array(d_cat[vfound + int(kvec[jbot].item()), 0]).astype(int)
 #    dist = d[vfound,1]-xin
     return matchid
 
