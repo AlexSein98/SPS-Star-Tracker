@@ -111,8 +111,7 @@ def read_cam_json(cam_config_file):
         skew = data["skew"]
 
     else: #TODO one day make assumptions based on input image
-        print(cam_config_file)
-        print('ERROR ['+str(__name__)+']: camera config file not found/failed to load!  Please fix the file and/or path and try again.  Exiting...')
+        raise Exception(f'Camera config file {cam_config_file} not found/failed to load! Please fix the file and/or path and try again. Exiting...')
 
         #pixel_pitch = [0.00112, 0.00112]  # mm
         #focal_length = 3  # mm
