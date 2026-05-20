@@ -133,7 +133,8 @@ class GravSampler:
         if not includeThirdBody:
             return g_pcpf
         
-        planetIDs = [10, 199, 299, 301, 399, 499, 599, 699, 799, 899]  # no Pluto hehe >:)
+        # planetIDs = [10, 199, 299, 301, 399, 499, 599, 699, 799, 899]  # no Pluto hehe >:)
+        planetIDs = [10, 301, 399, 599]
         T_centralBody = spice.pxform("J2000", self.gravModel.spiceBodyFrame, et)
         for id in planetIDs:
             # Assume SPICE has been furnsh'd
@@ -150,6 +151,30 @@ class GravSampler:
             g_inertial = mu * (r_sat_body / (np.linalg.norm(r_sat_body) ** 3) - pos_m / (np.linalg.norm(pos_m) ** 3))
             g_pcpf += T_centralBody @ g_inertial
         return g_pcpf
+    
+    def ThirdBodyAcceleration(self, posSurface: npt.NDArray, et: float = 0.0) -> npt.NDArray:
+        g_pcpf = np.zeros(3)
+        # return g_pcpf
+
+        # planetIDs = [10, 199, 299, 301, 399, 499, 599, 699, 799, 899]  # no Pluto hehe >:)
+        planetIDs = [10, 301, 399, 599]
+        T_centralBody = spice.pxform("J2000", self.gravModel.spiceBodyFrame, et)
+        for id in planetIDs:
+            # Assume SPICE has been furnsh'd
+            name: str = spice.bodc2n(id)
+            if name == self.gravModel.name:
+                continue  # No third-body gravity if this is the central body
+
+            pos_km, _ = spice.spkpos(name, et, "J2000", "NONE", self.gravModel.name)
+            pos_m = 1000.0 * pos_km
+
+            muResult = spice.bodvrd(name, "GM", 1)
+            mu: float = muResult[1][0] * 1e9
+            r_sat_body: npt.NDArray = pos_m - T_centralBody.T @ posSurface
+            g_inertial = mu * (r_sat_body / (np.linalg.norm(r_sat_body) ** 3) - pos_m / (np.linalg.norm(pos_m) ** 3))
+            g_pcpf += T_centralBody @ g_inertial
+        return g_pcpf
+
 
     def DeltaXYZ_to_DeltaLatLon(self, lla: LatLonAlt, R: float, dXYZ: float) -> DeltaLatLon:
         """
@@ -186,8 +211,15 @@ class GravSampler:
 
         return DeltaLatLon(lla, llaPlusX, llaMinusX, llaPlusY, llaMinusY, llaPlusZ, llaMinusZ)
     
-    def SampleGradient_SphericalHarmonic(self, xyz: npt.NDArray, maxDegree: float) -> npt.NDArray:
-        G = np.identity(3)
+    def SampleGradient_SphericalHarmonic(self, lat: float, lon: float, r: float, maxDegree: float) -> npt.NDArray:
+        mu = self.gravModel.mu
+        T = latlon_to_T(lat, lon)
+        posSurface = r * T[0, :]
+        r_inv = 1.0 / r
+
+        # G = -np.identity(3)
+        G = -mu * (r_inv ** 3) * (np.identity(3) - np.outer(posSurface, posSurface) * r_inv ** 2)
+        G += -self.HarmonicGradient(posSurface, self.gravModel, lat, lon, maxDegree, maxDegree)
         return G
 
 
@@ -227,7 +259,7 @@ class GravSampler:
         dg_dy: npt.NDArray = dXYZ_inv * (dg_dy_p - dg_dy_m)
         dg_dz: npt.NDArray = dXYZ_inv * (dg_dz_p - dg_dz_m)
 
-        return np.array([dg_dx, dg_dy, dg_dz]).T
+        return np.array([dg_dx, dg_dy, dg_dz])
     
     def GetGradientGrid(self, maxDegree: float) -> npt.NDArray:
         mu = self.gravModel.mu
@@ -312,6 +344,8 @@ class GravSampler:
         mu = gravModel.mu
 
         r_norm = np.linalg.norm(r)
+        r_norm_inv = 1.0 / r_norm
+        r_norm_inv_2 = r_norm_inv * r_norm_inv
         sinLat = np.sin(lat_r)
         cosLat = np.cos(lat_r)
         tanLat = np.tan(lat_r)
@@ -332,6 +366,8 @@ class GravSampler:
         dUdLat = 0.0
         dUdLon = 0.0
         for l in range(2, size):
+            R_r_l = (R * r_norm_inv) ** l
+            l_1 = l + 1.0
             for m in range(0, min(l + 1, order + 1)):
                 PI_lm = self.NormalizationCoefficient(l, m)
                 Clm = gravModel.Clm[l][m] / PI_lm
@@ -341,25 +377,20 @@ class GravSampler:
                 if m < l:
                     Plm1 = P[l][m + 1]
 
-                dUdr += ((R / r_norm) ** l) * (l + 1) * P[l][m] * \
-                        (Clm * np.cos(m * lon_r) + Slm * np.sin(m * lon_r))
+                dUdr += R_r_l * l_1 * P[l][m] * (Clm * np.cos(m * lon_r) + Slm * np.sin(m * lon_r))
+                dUdLat += R_r_l * (Plm1 - m * tanLat * P[l][m]) * (Clm * np.cos(m * lon_r) + Slm * np.sin(m * lon_r))
+                dUdLon += R_r_l * m * P[l][m] * (Slm * np.cos(m * lon_r) - Clm * np.sin(m * lon_r))
 
-                dUdLat += ((R / r_norm) ** l) * (Plm1 - m * tanLat * P[l][m]) * \
-                        (Clm * np.cos(m * lon_r) + Slm * np.sin(m * lon_r))
-
-                dUdLon += ((R / r_norm) ** l) * m * P[l][m] * \
-                        (Slm * np.cos(m * lon_r) - Clm * np.sin(m * lon_r))
-
-        dUdr *= -mu / (r_norm ** 2)
-        dUdLat *= mu / r_norm
-        dUdLon *= mu / r_norm
+        dUdr *= -mu * r_norm_inv_2
+        dUdLat *= mu * r_norm_inv
+        dUdLon *= mu * r_norm_inv
 
         r_squared = r_norm ** 2
         rho_squared = r[0] ** 2 + r[1] ** 2
         rho = np.sqrt(rho_squared)
-        a_x = (dUdr / r_norm - r[2] * dUdLat / (r_squared * rho)) * r[0] - (dUdLon / rho_squared) * r[1]
-        a_y = (dUdr / r_norm - r[2] * dUdLat / (r_squared * rho)) * r[1] + (dUdLon / rho_squared) * r[0]
-        a_z = (dUdr / r_norm) * r[2] + (rho * dUdLat / r_squared)
+        a_x = (dUdr * r_norm_inv - r[2] * dUdLat / (r_squared * rho)) * r[0] - (dUdLon / rho_squared) * r[1]
+        a_y = (dUdr * r_norm_inv - r[2] * dUdLat / (r_squared * rho)) * r[1] + (dUdLon / rho_squared) * r[0]
+        a_z = (dUdr * r_norm_inv) * r[2] + (rho * dUdLat * r_norm_inv_2)
 
         return np.array([a_x, a_y, a_z])
 
@@ -376,6 +407,8 @@ class GravSampler:
         mu = gravModel.mu
 
         r_norm = np.linalg.norm(r)
+        r_norm_inv = 1.0 / r_norm
+        r_norm_inv_2 = r_norm_inv * r_norm_inv
         sinLat = np.sin(lat_r)
         cosLat = np.cos(lat_r)
         tanLat = np.tan(lat_r)
@@ -396,4 +429,88 @@ class GravSampler:
         dUdLat = 0.0
         dUdLon = 0.0
 
+        d2U_dr2 = 0.0
+        d2U_dLat2 = 0.0
+        d2U_dLon2 = 0.0
+        d2U_dr_dLat = 0.0
+        d2U_dr_dLon = 0.0
+        d2U_dLat_dLon = 0.0
+
+        for l in range(2, size):
+            R_r_l = (R * r_norm_inv) ** l
+            R_r_l_1 = R_r_l * (l + 1.0)
+            R_r_l_1_2 = R_r_l_1 * (l + 2.0)
+            for m in range(0, min(l + 1, order + 1)):
+                m2 = m * m
+                tan_2 = tanLat * tanLat
+
+                PI_lm = self.NormalizationCoefficient(l, m)
+                Plm1 = 0.0 ###
+                if m < l:
+                    Plm1 = P[l][m + 1]
+                    
+                Clm = gravModel.Clm[l][m] / PI_lm
+                Slm = gravModel.Slm[l][m] / PI_lm
+
+                Clm_cos_Slm_sin = Clm * np.cos(m * lon_r) + Slm * np.sin(m * lon_r)
+                Slm_cos_Clm_sin = Slm * np.cos(m * lon_r) - Clm * np.sin(m * lon_r)
+
+                Plm_Clm_cos_Slm_sin = P[l][m] * Clm_cos_Slm_sin
+                Plm_Slm_cos_Clm_sin = (Plm1 - m * tanLat * P[l][m]) * Slm_cos_Clm_sin
+                
+                dUdr += R_r_l_1 * Plm_Clm_cos_Slm_sin
+                dUdLat += R_r_l * (Plm1 - m * tanLat * P[l][m]) * (Clm * np.cos(m * lon_r) + Slm * np.sin(m * lon_r))
+                dUdLon += R_r_l * m * P[l][m] * Slm_cos_Clm_sin
+                
+                d2U_dr2 += R_r_l_1_2 * Plm_Clm_cos_Slm_sin
+                d2U_dLat2 += R_r_l * Clm_cos_Slm_sin * \
+                    (tanLat * Plm1 + (m2 * tan_2 - m * (1.0 + tan_2) - (l - m) * (l + m + 1.0)) * P[l][m])
+                d2U_dLon2 += R_r_l * m2 * Plm_Clm_cos_Slm_sin
+                d2U_dr_dLat += R_r_l_1 * (Plm1 - m * tanLat * P[l][m]) * Clm_cos_Slm_sin
+                d2U_dr_dLon += R_r_l_1 * m * P[l][m] * Slm_cos_Clm_sin
+                d2U_dLat_dLon += R_r_l * m * Plm_Slm_cos_Clm_sin
         
+        dUdr *= -mu * r_norm_inv_2
+        dUdLat *= mu * r_norm_inv
+        dUdLon *= mu * r_norm_inv
+
+        d2U_dr2 *= mu * r_norm_inv * r_norm_inv_2
+        d2U_dLat2 *= mu * r_norm_inv
+        d2U_dLon2 *= -mu * r_norm_inv
+        d2U_dr_dLat *= -mu * r_norm_inv_2
+        d2U_dr_dLon *= -mu * r_norm_inv_2
+        d2U_dLat_dLon *= mu * r_norm_inv
+
+        dU_mat = np.array([[d2U_dr2, d2U_dr_dLat, d2U_dr_dLon],
+                           [d2U_dr_dLat, d2U_dLat2, d2U_dLat_dLon],
+                           [d2U_dr_dLon, d2U_dLat_dLon, d2U_dLon2]])
+
+        r_squared = r_norm ** 2
+        rho_squared = r[0] ** 2 + r[1] ** 2
+        rho = np.sqrt(rho_squared)
+
+        rr = np.outer(r, r)
+        ri = r[0]
+        rj = r[1]
+        rk = r[2]
+        i_hat = np.array([1.0, 0.0, 0.0])
+        j_hat = np.array([0.0, 1.0, 0.0])
+        k_hat = np.array([0.0, 0.0, 1.0])
+
+        dr_dr = np.array([r * r_norm_inv]).T
+        dLat_dr = np.array([(1.0 / rho) * (-r * rk * r_norm_inv_2 + k_hat)]).T
+        dLon_dr = np.array([(1.0 / rho_squared) * (ri * j_hat - rj * i_hat)]).T
+
+        dr_dr_mat = np.hstack((dr_dr, dLat_dr, dLon_dr))
+
+        d2r_dr2 = r_norm_inv * (np.identity(3) - rr * r_norm_inv_2)
+        d2Lat_dr2 = -(rho_squared ** -1.5) * np.outer(k_hat - rk * r_norm_inv_2 * r, np.array([ri, rj, 0.0])) - \
+            1.0 / (r_squared * rho) * (np.outer(r, k_hat) + rk * np.identity(3) - 
+                                       2.0 * rk * r_norm_inv_2 * rr)
+        d2Lon_dr2 = -(2.0 / (rho_squared * rho_squared)) * np.outer(np.array([-rj, ri, 0.0]), np.array([ri, rj, 0.0])) + \
+            (1.0 / rho_squared) * np.array([[0.0, -1.0, 0.0],
+                                            [1.0, 0.0, 0.0],
+                                            [0.0, 0.0, 0.0]])
+        
+        G = dU_mat @ dr_dr_mat + dUdr * d2r_dr2 + dUdLat * d2Lat_dr2 + dUdLon * d2Lon_dr2
+        return G

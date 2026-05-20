@@ -20,9 +20,8 @@ def difference_of_gravities(real_grav: np.ndarray[float], sphere_grav: np.ndarra
 
 
 if __name__ == "__main__":
-    home = "./py_src/star/"
-    spice.furnsh(home + "data/metakernel.txt")
-    tNow = '2025 July 4, 00:00:00 UTC'
+    spice.furnsh("./py_src/star/data/metakernel.txt")
+    tNow = globalConfig.tNow
     etNow = spice.str2et(tNow)
     
     planet = globalConfig.planet
@@ -95,10 +94,12 @@ if __name__ == "__main__":
             angle_matrix[i].append(_angle)
             diff_matrix[i].append(_diff)
     
-    fig1 = plt.figure()
+    fig1 = plt.figure(layout='constrained')
+    fig1.set_size_inches(9.6, 5.4)
     ax1 = fig1.add_subplot(111)
     
-    fig2 = plt.figure()
+    fig2 = plt.figure(layout='constrained')
+    fig2.set_size_inches(9.6, 5.4)
     ax2 = fig2.add_subplot(111)
 
     print(f'Max deviation = {np.max(deg_to_arcsec(np.rad2deg(np.asarray(angle_matrix))))}"')
@@ -109,15 +110,21 @@ if __name__ == "__main__":
     plt.colorbar(label='Gravity Vector Difference (arcsec)')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    plt.title("Error Between Spherical Harmonic and Pure Spherical Gravity Models")
-    # plt.title("Error Between 3rd Body Perturbation and Pure Spherical Gravity Models")
+    plt.title("Deviation Between Spherical Harmonic and Spherical Gravity Models")
+
+    outputFile1 = globalConfig.outputDir + globalConfig.nameTitle + "GravityVectorAngularDeviations.png"
+    plt.savefig(outputFile1, bbox_inches='tight', facecolor='white', transparent="False", pad_inches=0.25, dpi=300)
+    print(f"Saved {globalConfig.nameTitle} gravity vector angular deviations to {outputFile1}")
 
     plt.sca(ax2)
     plt.imshow(diff_matrix, cmap='rainbow', aspect='equal', extent = [-180,180,-90,90])
     plt.colorbar(label='Gravity Vector Difference (m/s^2)')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    plt.title("Error Between Spherical Harmonic and Pure Spherical Gravity Models")
-    # plt.title("Error Between 3rd Body Perturbation and Pure Spherical Gravity Models")
+    plt.title("Deviation Between Spherical Harmonic and Spherical Gravity Models")
+
+    outputFile2 = globalConfig.outputDir + globalConfig.nameTitle + "GravityVectorMagnitudeDeviations.png"
+    plt.savefig(outputFile2, bbox_inches='tight', facecolor='white', transparent="False", pad_inches=0.25, dpi=300)
+    print(f"Saved {globalConfig.nameTitle} gravity vector magnitude deviations to {outputFile2}")
 
     plt.show()

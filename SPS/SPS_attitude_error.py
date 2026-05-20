@@ -50,7 +50,7 @@ def arcsec_to_rad(angle):
     return np.deg2rad(angle / 3600.0)
 
 
-def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, reject: float=0, planetRadius: float=6378136.3):
+def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, reject: float, planetRadius):
     truthData = read_csv(truthDataPath)
     estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
     latLonData = read_csv(latLonDataPath)
@@ -92,7 +92,10 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
         # print(f'latIdx = {latIdx}')
         # print(f'lonIdx = {lonIdx}\n')
 
-        errorsArcsecArray[latIdx, lonIdx] = phi_arcsec if phi_arcsec < reject else reject
+        if reject != 0:
+            errorsArcsecArray[latIdx, lonIdx] = phi_arcsec if phi_arcsec < reject else reject
+        else:
+            errorsArcsecArray[latIdx, lonIdx] = phi_arcsec
 
         if reject != 0 and phi_arcsec > reject:
             continue
@@ -118,7 +121,8 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
     print(f'Projected SPS Mean Error    = {round(projectedSPSMeanError, 1)} meters')
 
     # Plot histogram and box plot of errors
-    fig = plt.figure()
+    fig = plt.figure(layout='constrained')
+    fig.set_size_inches(9.6, 5.4)
     ax1 = fig.add_subplot(211)
     ax2 = fig.add_subplot(212)
     ax1.hist(errorsArcsec, bins=200, color='skyblue', edgecolor='black')
@@ -145,7 +149,12 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
     ax2.set_xlabel('Error (arcseconds)')
     ax2.grid()
 
-    fig2 = plt.figure()
+    outputFile1 = globalConfig.outputDir + globalConfig.nameTitle + "AttitudeErrorStatistics.png"
+    plt.savefig(outputFile1, bbox_inches='tight', facecolor='white', transparent="False", pad_inches=0.25, dpi=300)
+    print(f"Saved {globalConfig.nameTitle} attitude error statistics to {outputFile1}")
+
+    fig2 = plt.figure(layout='constrained')
+    fig2.set_size_inches(9.6, 5.4)
     ax3 = fig2.add_subplot(111)
     plt.sca(ax3)
 
@@ -156,8 +165,12 @@ def plot_errors(truthDataPath: str, estDataPath: str, latLonDataPath: str, rejec
     ax3.set_ylabel("Latitude")
     ax3.set_title("Star Sensor Attitude Estimation Error")
 
+    outputFile2 = globalConfig.outputDir + globalConfig.nameTitle + "AttitudeErrorMap.png"
+    fig2.savefig(outputFile2, bbox_inches='tight', facecolor='white', transparent="False", pad_inches=0.25, dpi=300)
+    print(f"Saved {globalConfig.nameTitle} attitude error map to {outputFile2}")
+
     # Show plot
-    plt.show()
+    # plt.show()
 
 
 if __name__ == "__main__":
@@ -165,25 +178,15 @@ if __name__ == "__main__":
 
     # Star tracker "measurements" file
     n = len(sys.argv)
-    measurements = "./output_" + planet.planetName.title() + ".csv"
-    if n > 1:
-        measurements = sys.argv[1]
+    measurements = globalConfig.outputDir + "output_" + planet.planetName.title() + ".csv"
     
     # Truth source directory
-    truthSourceDir = "./py_src/star/"
-    if n > 2:
-        truthSourceDir = sys.argv[2]
+    truthData = globalConfig.outputDir + "truth_data_" + planet.planetName.title() + ".csv"
     
     # Latitude, longitude, and altitude
-    latLonDataPath = "./sampleLatLongs_" + planet.planetName.title() + ".csv"
-    if n > 3:
-        latLonDataPath = sys.argv[3]
+    latLonData = globalConfig.outputDir + "sampleLatLongs_" + planet.planetName.title() + ".csv"
     
     # Cutoff for "good measurements" in arcseconds
-    reject = 360
-    if n > 4:
-        reject = float(sys.argv[4])
-    
-    print(f'latLonDataPath = {latLonDataPath}')
+    reject = 0.0  # If 0, no measurement cutoff
 
-    plot_errors(truthSourceDir + "truth_data_" + planet.planetName.title() + ".csv", measurements, latLonDataPath, reject=reject, planetRadius=planet.radius)
+    plot_errors(truthData, measurements, latLonData, reject, planet.radius)

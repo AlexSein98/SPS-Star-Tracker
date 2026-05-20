@@ -57,7 +57,7 @@ planet = globalConfig.planet
 ################################
 nmatch = 8 # minimum number of stars to match
 starMatchPixelTol = 1 # pixel match tolerance
-min_star_area = 5 # minimum pixel area for a star
+min_star_area = 3 # minimum pixel area for a star
 max_star_area = 200 # maximum pixel area for a star
 max_num_stars_to_process = 40 # maximum number of centroids to attempt to match per image
 
@@ -68,18 +68,11 @@ VERBOSE = False # set True for prints on results
 graphics = False # set True for graphics throughout the solve process
 np.set_printoptions(suppress=True)
 
-n = len(sys.argv)
-home = "./"
-if n > 1:
-    home = sys.argv[1]   
+imgSourceDir = globalConfig.renderDir
 
-imgSourceDir = home + "py_src/star/python/output/" + planet.planetName.title()
-if n > 2:
-    imgSourceDir = sys.argv[2]
-
-data_path = home + 'data' # full path to your data
-cam_config_file_path = home + 'data/cam_config/Custom_cam.json' # full path (including filename) of your cam config file
-darkframe_file_path = home + 'Images/darkframes/darkframe.png' # full path (including filename) of your darkframe file
+data_path = './data' # full path to your data
+cam_config_file_path = './data/cam_config/Custom_cam.json' # full path (including filename) of your cam config file
+darkframe_file_path = './Images/darkframes/darkframe.png' # full path (including filename) of your darkframe file
 image_extension = ".png" # the image extension to search for in the data_path directory
 cat_prefix ='' # if the catalog has a prefix, define it here
 
@@ -196,13 +189,7 @@ now = now.replace(':','-')
 #write stuff
 keys=sorted(data.keys())
 
-filename = ""
-if n > 3:
-    filename = sys.argv[3]
-else:
-    # filename = home + now + '_data_file_nm-'+str(nmatch)+'_pxl-'+str(starMatchPixelTol)+'.csv'
-    filename = home + "output_" + planet.planetName.title() + ".csv"
-
+filename = globalConfig.outputDir + "output_" + planet.planetName.title() + ".csv"
 with open(filename,'w', newline='') as csv_file:
     writer=csv.writer(csv_file)
     writer.writerow(keys)

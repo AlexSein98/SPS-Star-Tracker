@@ -62,18 +62,18 @@ def arcsec_to_rad(angle):
     return np.deg2rad(angle / 3600.0)
 
 
-def SnapToSurface(xyz: npt.NDArray, a: float, b: float, dem: npt.NDArray) -> npt.NDArray:
-    phi_pg, lon, _ = cartesian_to_planetographic(xyz, a, b)
+def SnapToSurface(xyz: npt.NDArray, planet: Planet, dem: npt.NDArray) -> npt.NDArray:
+    phi_pg, lon, _ = cartesian_to_planetographic(xyz, planet.radius, planet.gravModel.polarRadius)
     h_ellp_true = SampleGlobalDEM_LatLon(dem, phi_pg, lon)
     if planet.planetName == "EARTH":
         h_ellp_true = max(h_ellp_true, 0.0)
-    return planetographic_to_cartesian(phi_pg, lon, h_ellp_true, a, b)
+    return planetographic_to_cartesian(phi_pg, lon, h_ellp_true, planet.radius, planet.gravModel.polarRadius)
 
 
 def CoarseEstimate_SurfaceFixed(T_i_b: npt.NDArray, T_i_c: npt.NDArray, T_g_c: npt.NDArray,
-                                g_sensorFrame: npt.NDArray, etNow: float, gravModel: grav_base, 
-                                sampler: GravSampler, dem: npt.NDArray, scaleFactor: float,
-                                Omega: npt.NDArray, r_prev: npt.NDArray = np.zeros(3)):
+                                g_sensorFrame: npt.NDArray, etNow: float, planet: Planet, 
+                                gravModel: grav_base, sampler: GravSampler, dem: npt.NDArray, 
+                                scaleFactor: float, Omega: npt.NDArray, r_prev: npt.NDArray = np.zeros(3)):
     gravMagInv = gravModel.radius ** 3 / gravModel.mu
     if (r_prev.any() != 0.0):
         gravMagInv = np.linalg.norm(r_prev) ** 3 / gravModel.mu
@@ -89,6 +89,89 @@ def CoarseEstimate_SurfaceFixed(T_i_b: npt.NDArray, T_i_c: npt.NDArray, T_g_c: n
     return r_next
 
 
+class FineOutputs:
+    def __init__(self, _pos: npt.NDArray, gravModel: grav_base, _g_est: npt.NDArray, 
+                 _g_model: npt.NDArray, _iterations: int):
+        self.pos = _pos
+        _phi_pg, _lon, _alt = cartesian_to_planetographic(self.pos, gravModel.radius, gravModel.polarRadius)
+        self.phi_pg = _phi_pg
+        self.lon = _lon
+        self.alt = _alt
+
+        self.g_est = _g_est
+        self.g_model = _g_model
+
+        self.iterations = _iterations
+
+
+def FineEstimate(r_coarse: npt.NDArray, T_i_b: npt.NDArray, T_i_c: npt.NDArray, T_g_c: npt.NDArray,
+                 g_sensorFrame: npt.NDArray, etNow: float, planet: Planet, gravModel: grav_base, 
+                 sampler: GravSampler, dem: npt.NDArray, scaleFactor: float, Omega: npt.NDArray, 
+                 maxDegree: int, gradientWalkFactor: float, tol: float, doPrint: bool, j: int) -> FineOutputs:
+    r_hat_i_plus_1 = copy.deepcopy(r_coarse)
+    r_hat_i = np.zeros(3)
+
+    phi_pg, lon, _ = cartesian_to_planetographic(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius)
+    alt = scaleFactor * SampleGlobalDEM_LatLon(dem, phi_pg, lon)
+    if planet.planetName == "EARTH":
+        alt = max(alt, 0.0)
+    
+    # Gradient method:
+    i: int = 0
+    g = np.zeros(3)
+    g_est = np.zeros(3)
+    while np.linalg.norm(r_hat_i_plus_1 - r_hat_i) > tol:
+        i += 1
+        r_hat_i = copy.deepcopy(r_hat_i_plus_1)
+        
+        # Gravitational acceleration:
+        phi_pc, _, _ = r_to_latlonalt(r_hat_i, gravModel.radius)
+        phi_pg_test, _, _ = cartesian_to_planetographic(r_hat_i, gravModel.radius, gravModel.polarRadius)
+        g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(r_hat_i), 
+                                              maxDegree, includeThirdBody=False)
+        # g += np.cross(Omega, np.cross(Omega, r_hat_i))
+
+        # Gradient
+        # dXYZ in meters, based on mean observed star tracker error
+        dXYZ: float = planet.radius * arcsec_to_rad(20.0)
+        G = sampler.SampleGradient_Numerical(r_hat_i, maxDegree, dXYZ, includeThirdBody=False)
+
+        # G = sampler.SampleGradient_SphericalHarmonic(phi_pc, lon, np.linalg.norm(r_hat_i), maxDegree)
+        G_inv = np.linalg.inv(G)
+
+        g_est = T_i_b @ T_i_c.T @ T_g_c @ g_sensorFrame + np.cross(Omega, np.cross(Omega, r_hat_i)) - \
+            sampler.ThirdBodyAcceleration(r_hat_i, etNow)
+        dg = g - g_est
+
+        dr = G_inv @ dg
+        r_hat_i_plus_1 = r_hat_i - gradientWalkFactor * dr
+
+        # r_hat_i_plus_1 = SnapToSurface(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius, dem)
+
+        phi_pg, lon, _ = cartesian_to_planetographic(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius)
+        alt = scaleFactor * SampleGlobalDEM_LatLon(dem, phi_pg, lon)
+        if planet.planetName == "EARTH":
+            alt = max(alt, 0.0)
+        
+        r_hat_i_plus_1 = planetographic_to_cartesian(phi_pg, lon, alt, gravModel.radius, gravModel.polarRadius)
+        
+        # This shouldn't happen anymore? But it is???
+        if i > 20:
+            print(f'Sample {j}, Iteration {i} dr = {np.round(dr, 3)} m')
+            break
+        
+        if doPrint:
+            prefix: str = f"Sample {j}, Iteration {i} r  ="
+            print(f'{prefix} {np.round(r_hat_i_plus_1, 3)} m, phi_pc = {round(phi_pc, 6)}, phi_pg = {round(phi_pg_test, 6)}, lon = {round(lon, 6)}')
+    
+    r_hat_i_plus_1 = SnapToSurface(r_hat_i_plus_1, planet, dem)
+    return FineOutputs(r_hat_i_plus_1, gravModel, g_est, g, i)
+
+
+def CostFunction(g_est: npt.NDArray, g_model: npt.NDArray):
+    return np.linalg.norm(g_est - g_model)
+
+
 def estimate_position(truthDataPath: str, estDataPath: str, gravEstDataPath: str, 
                       latLonDataPath: str, planet: Planet, gravModel: grav_base):
     np.set_printoptions(suppress=True)
@@ -101,6 +184,17 @@ def estimate_position(truthDataPath: str, estDataPath: str, gravEstDataPath: str
     T_i_b = spice.pxform("J2000", planet.planetFrame, etNow)
 
     dem = ReadDEM(planet.demName)
+    
+    # Sigma initialization
+    sigma: float = 500.0
+    if globalConfig.nameTitle == "Earth":
+        sigma = 280.0 * 10.0
+    elif globalConfig.nameTitle == "Moon":
+        sigma = 160.0 * 10.0
+    elif globalConfig.nameTitle == "Mars":
+        sigma = 190.0 * 10.0
+    elif globalConfig.nameTitle == "Phobos":
+        sigma = 3.0 * 10.0
 
     truthData = read_csv(truthDataPath)
     estData = read_csv(estDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
@@ -134,13 +228,12 @@ def estimate_position(truthDataPath: str, estDataPath: str, gravEstDataPath: str
 
     startTime = time.perf_counter()
     elapsedSeconds: float = 0.0
-    printInterval: int = 100
+    printInterval: int = 10
     gradientWalkFactor: float = 1.0
 
     position_errors: list[npt.NDArray] = []
     for j in range(L):
         doPrint: bool = j % printInterval == 0
-        # doPrint = False
 
         truth_j = truthData[j]
         est_j = estData[j]
@@ -155,26 +248,24 @@ def estimate_position(truthDataPath: str, estDataPath: str, gravEstDataPath: str
             print(f'Warning: skipped measurement at index {j} (invalid quaternion).')
             continue
         
-        q_real = Quaternion(truth_j[0], truth_j[1], truth_j[2], truth_j[3]).normalize()
         q_est = Quaternion(est_j[0], est_j[1], est_j[2], est_j[3]).normalize()
         
         T_i_c = q_est.to_matrix()
         T_g_c = np.identity(3)  # transformation from gravity to camera frame
 
         Omega = np.array([0.0, 0.0, gravModel.omega])
-        # g_sensorFrame = np.array([-gravModel.mu / (gravModel.radius ** 2), 0.0, 0.0])
         g_sensorFrame = np.array([gravEst_j[0], gravEst_j[1], gravEst_j[2]])
 
         # Coarse estimates
-        r_coarse_1 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, 
+        r_coarse_1 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega)
-        r_coarse_2 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, 
+        r_coarse_2 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega, r_coarse_1)
-        r_coarse_3 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, 
+        r_coarse_3 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega, r_coarse_2)
-        r_coarse_4 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, 
+        r_coarse_4 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega, r_coarse_3)
-        r_coarse_5 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, 
+        r_coarse_5 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega, r_coarse_4)
         
         if doPrint:
@@ -188,88 +279,55 @@ def estimate_position(truthDataPath: str, estDataPath: str, gravEstDataPath: str
             print(f'r_coarse_4 = {r_coarse_4}')
             print(f'r_coarse_5 = {r_coarse_5}')
         
-        r_hat_i_plus_1 = copy.deepcopy(r_coarse_5)
-        r_hat_i = np.zeros(3)
-
-        phi_pg, lon, _ = cartesian_to_planetographic(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius)
-        alt = scaleFactor * SampleGlobalDEM_LatLon(dem, phi_pg, lon)
-        if planet.planetName == "EARTH":
-            alt = max(alt, 0.0)
-
-        # Gradient method:
-        i: int = 0
-
-        # tol: float = planet.radius * 1e-6  # m
         tol: float = 10.0  # m
-        dr: npt.NDArray = np.zeros(3)
-        dr_prev: npt.NDArray = 2.0 * tol * np.ones(3)
+        fineOutputs = FineEstimate(r_coarse_5, T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, planet, gravModel, sampler, 
+                                   dem, scaleFactor, Omega, maxDegree, gradientWalkFactor, tol, doPrint, j)
+
+        # Sigma point scatter
+        upEastNorth = latlon_to_T(fineOutputs.phi_pg, fineOutputs.lon)
+        east = upEastNorth[:, 1]
+        north = upEastNorth[:, 2]
         
-        # while np.linalg.norm(dr - dr_prev) > tol:
-        while np.linalg.norm(r_hat_i_plus_1 - r_hat_i) > tol:
-            i += 1
-            r_hat_i = copy.deepcopy(r_hat_i_plus_1)
-            dr_prev = copy.deepcopy(dr)
-            
-            # Gravitational acceleration:
-            phi_pc, _, _ = r_to_latlonalt(r_hat_i, gravModel.radius)
-            phi_pg_test, _, _ = cartesian_to_planetographic(r_hat_i, gravModel.radius, gravModel.polarRadius)
-            g = sampler.SampleAcceleration_Custom(phi_pc, lon, np.linalg.norm(r_hat_i), 
-                                                  maxDegree, includeThirdBody=False)
-            # g += np.cross(Omega, np.cross(Omega, r_hat_i))
+        sigmaPoints: list[npt.NDArray] = [fineOutputs.pos + north * sigma, fineOutputs.pos - north * sigma,
+                                          fineOutputs.pos + east * sigma, fineOutputs.pos - east * sigma]
+        sigmaPointOutputs: list[FineOutputs] = []
+        for s in range(4):
+            sigmaPoint = sigmaPoints[s]
+            fineOutputs_sigma = FineEstimate(sigmaPoint, T_i_b, T_i_c, T_g_c, g_sensorFrame, etNow, 
+                                             planet, gravModel, sampler, dem, scaleFactor, Omega, 
+                                             maxDegree, gradientWalkFactor, tol, doPrint, j)
+            sigmaPointOutputs.append(fineOutputs_sigma)
+        
+        cost_nominal = CostFunction(fineOutputs.g_est, fineOutputs.g_model)
+        cost_0 = CostFunction(sigmaPointOutputs[0].g_est, sigmaPointOutputs[0].g_model)
+        cost_1 = CostFunction(sigmaPointOutputs[1].g_est, sigmaPointOutputs[1].g_model)
+        cost_2 = CostFunction(sigmaPointOutputs[2].g_est, sigmaPointOutputs[2].g_model)
+        cost_3 = CostFunction(sigmaPointOutputs[3].g_est, sigmaPointOutputs[3].g_model)
+        costs = np.array([cost_nominal, cost_0, cost_1, cost_2, cost_3])
+        argmin_cost = np.argmin(costs)
 
-            # Gradient
-            # dr in meters, based on mean observed star tracker error
-            dXYZ: float = planet.radius * arcsec_to_rad(20.0)
-            G = sampler.SampleGradient_Numerical(r_hat_i, maxDegree, dXYZ, includeThirdBody=False)
+        allOutputs = [fineOutputs, sigmaPointOutputs[0], sigmaPointOutputs[1], 
+                      sigmaPointOutputs[2], sigmaPointOutputs[3]]
+        minOutput = allOutputs[argmin_cost]
 
-            # G = sampler.SampleGradient_SphericalHarmonic(phi_pc, lon, np.linalg.norm(r_hat_i), maxDegree)
-            G_inv = np.linalg.inv(G)
-
-            g_sensorFrame = np.array([gravEst_j[0], gravEst_j[1], gravEst_j[2]])
-            g_est = T_i_b @ T_i_c.T @ T_g_c @ g_sensorFrame + np.cross(Omega, np.cross(Omega, r_hat_i)) - \
-                sampler.ThirdBodyAcceleration(r_hat_i, etNow)
-            dg = g - g_est
-
-            dr = G_inv @ dg
-            r_hat_i_plus_1 = r_hat_i - gradientWalkFactor * dr
-
-            # r_hat_i_plus_1 = SnapToSurface(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius, dem)
-
-            phi_pg, lon, _ = cartesian_to_planetographic(r_hat_i_plus_1, gravModel.radius, gravModel.polarRadius)
-            alt = scaleFactor * SampleGlobalDEM_LatLon(dem, phi_pg, lon)
-            if planet.planetName == "EARTH":
-                alt = max(alt, 0.0)
-            
-            r_hat_i_plus_1 = planetographic_to_cartesian(phi_pg, lon, alt, gravModel.radius, gravModel.polarRadius)
-            
-            # This shouldn't happen anymore? But it is???
-            if i > 100:
-                print(f'Sample {j}, Run {i} dr = {np.round(dr, 3)} m')
-                break
-            
-            if doPrint:
-                print(f'    Run {i} r    = {np.round(r_hat_i_plus_1, 3)} m, phi_pc = {round(phi_pc, 6)}, phi_pg = {round(phi_pg_test, 6)}, lon = {round(lon, 6)}')
-
+        r_bestEstimate = minOutput.pos
+        phi_pg = minOutput.phi_pg
+        lon = minOutput.lon
+        alt = minOutput.alt
+        i = minOutput.iterations
+        
         if doPrint:
+            print(f"Minimum cost found at sigma point {argmin_cost}")
             print(f'Estimated lat = {round(phi_pg, 6)} deg')
             print(f'Estimated lon = {round(lon, 6)} deg')
             print(f'True lat = {round(latTruth, 6)} deg')
             print(f'True lon = {round(lonTruth, 6)} deg\n')
         
-        # latTruth = float(latLon_j[0])
-        # lonTruth = float(latLon_j[1])
-        # altTruth = float(latLon_j[2])
-        # lon = lon2
-        # alt = alt2
-        # r_hat_i_plus_1 = r_coarse_3
-
-        # distanceErr_m = archaversine(gravModel.radius, np.deg2rad(latTruth), np.deg2rad(phi_pg), np.deg2rad(lonTruth), np.deg2rad(lon))
-        
         # Use direct vector distance instead of Haversine distance
         distanceErrVec_m = planetographic_to_cartesian(latTruth, lonTruth, altTruth, gravModel.radius, gravModel.polarRadius) - \
             planetographic_to_cartesian(phi_pg, lon, alt, gravModel.radius, gravModel.polarRadius)
         distanceErrVec_local_m: npt.NDArray = distanceErrVec_m - \
-            np.dot(normalize(r_hat_i_plus_1), distanceErrVec_m) * normalize(r_hat_i_plus_1)
+            np.dot(normalize(r_bestEstimate), distanceErrVec_m) * normalize(r_bestEstimate)
         
         # Subtract the radial component (TODO: subtract average terrain normal instead for a better estimate?)
         distanceErr_m = np.linalg.norm(distanceErrVec_local_m)

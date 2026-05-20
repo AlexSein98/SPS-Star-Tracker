@@ -313,6 +313,8 @@ class Quaternion:
         cls.y = q[2]
         cls.z = q[3]
 
+        return Quaternion(q[0], q[1], q[2], q[3])
+
     def mult(self, other):
         other = other.normalize()
         w1 = self.w
@@ -335,6 +337,9 @@ class Quaternion:
     def conjugate(self):
         return Quaternion(-self.w, self.x, self.y, self.z)
     
+    def v(self):
+        return np.array([self.x, self.y, self.z])
+
     def as_w_first_array(self):
         return np.array([self.w, self.x, self.y, self.z])
     
@@ -384,7 +389,7 @@ class Quaternion:
 if __name__ == "__main__":
     os.system('cls')
     np.set_printoptions(suppress=True)
-    testMode = 3
+    testMode = 4
 
     # For Space Teams University Competition 3
     # if testMode == 0:
@@ -463,3 +468,13 @@ if __name__ == "__main__":
     #     print(f'q_y90 = [w={q_y90.w:.6f}, x={q_y90.x:.6f}, y={q_y90.y:.6f}, z={q_y90.z:.6f}]')
     #     print(f'q_z90 = [w={q_z90.w:.6f}, x={q_z90.x:.6f}, y={q_z90.y:.6f}, z={q_z90.z:.6f}]\n')
     #     print(f'q_NED = [w={q_NED.w:.6f}, x={q_NED.x:.6f}, y={q_NED.y:.6f}, z={q_NED.z:.6f}]')
+
+    if testMode == 4:
+        # q_zForward = Quaternion(-0.018849076651759025, 0.8887694478034973, -0.13242265582084656, -0.4384037256240845)
+        q_zForward = Quaternion(-0.0919159720865237, -0.8297237157821655, 0.14735859632492065, 0.5304672122001648)
+        q_camera = Quaternion.FromMatrix(np.array([[0, -1,  0],
+                                                   [0,  0, -1],
+                                                   [1,  0,  0]]))
+        q_total = q_camera.mult(q_zForward)
+        # q_total = q_zForward.conjugate().mult(q_camera).conjugate()
+        print(f"q_total = {q_total.as_w_last_array()}")

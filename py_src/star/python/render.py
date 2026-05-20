@@ -158,7 +158,7 @@ def draw_star(img_subset: np.ndarray[float], indicesU: np.ndarray[float], indice
     return img_subset
 
 
-def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
+def render(ra: float, de: float, renderParams: RenderParams, renderDir: str):
     # Index
     idxLocal: int = renderParams.idx
 
@@ -278,8 +278,7 @@ def render(ra: float, de: float, renderParams: RenderParams, home_dir: str):
 
     # Save image
     img = cv2.cvtColor(np.clip(img_array, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-    destination = home_dir + "python/output/" + renderParams.planet.planetName.title() + \
-        "/StarRender_" + str(idxLocal).zfill(6) + ".png"
+    destination = renderDir + "StarRender_" + str(idxLocal).zfill(6) + ".png"
     cv2.imwrite(destination, img)
 
 

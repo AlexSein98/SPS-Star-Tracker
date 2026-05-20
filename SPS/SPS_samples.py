@@ -89,19 +89,26 @@ if __name__ == "__main__":
             lons[i].append(lon)
             alts[i].append(altitude_m)
     
-    with open("./sampleLatLongs_" + planet.planetName.title() + ".csv", "w") as samples:
+    with open(globalConfig.outputDir + "sampleLatLongs_" + planet.planetName.title() + ".csv", "w") as samples:
         writer = csv.writer(samples, delimiter=",", quotechar="|", lineterminator="\n")
         for i in range(len(alts)):
             for j in range(len(alts[0])):
                 writer.writerow([lats[i][j], lons[i][j], alts[i][j]])
     
     # Visualize:
-    fig = plt.figure()
+    fig = plt.figure(layout='constrained')
+    fig.set_size_inches(9.6, 5.4)
     ax = fig.add_subplot(111)
+    ax.set_title(globalConfig.nameTitle + " Heightmap")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
 
     # cmap options: [RdYlGn_r, rainbow]
     plt.imshow(alts, cmap='rainbow', aspect='equal', extent = [-180, 180, -90, 90])
     plt.colorbar(label='Altitude (m)')
-    plt.savefig("./" + planet.planetName.title() + "Heightmap.png", bbox_inches='tight', transparent="True", pad_inches=0)
 
-    plt.show()
+    outputFile = globalConfig.outputDir + globalConfig.nameTitle + "Heightmap.png"
+    plt.savefig(outputFile, bbox_inches='tight', facecolor='white', transparent="False", pad_inches=0.25, dpi=300)
+    print(f"Saved {globalConfig.nameTitle} heightmap to {outputFile}")
+
+    # plt.show()
