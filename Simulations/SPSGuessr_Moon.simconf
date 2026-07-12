@@ -1,0 +1,941 @@
+{
+	"meta": {
+		"schemaversion_major": 2,
+		"schemaversion_minor": 0,
+		"schemaversion_patch": 0
+	},
+	"IncludeSims": [
+		"Core/Compute_Server/packages/BaseSims/EarthMoonSun_WithInertial.simconf"
+	],
+	"SystemManager": {
+		"FieldEffects": [
+			{
+				"Nametag": "Gravity_Moon_Harmonic_Relativistic",
+				"FieldName": "Gravity",
+				"Source": "EnvironmentalModels/Gravity/bin/Gravity_Harmonic_Relativistic",
+				"Type": "Vector",
+				"Active": true,
+				"Inst_Parameters": {
+					"Gravitator": [ "EntityRef", "Moon" ],
+					"Model": "MoonGrav_moon_GRAIL1200",
+					"Degree": [ "int32", 64 ],
+					"Order": [ "int32", 64 ]
+				}
+			}
+		],
+		"Systems": [
+			{
+				"Nametag": "SnapAssetToPlanet",
+				"Active": true,
+				"FreqType": "Sim",
+				"Frequency": 1.0,
+				"Inst_Parameters": {
+					"DatasetPriorities": [
+						"array",
+						"double",
+						0.0,
+						1.0,
+						2.0,
+						3.0
+					],
+					"Datasets": [
+						"array",
+						"string",
+						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters"
+					],
+					"DoSlowGraphicsStuff": true,
+					"LOD": 22.0,
+					"PlanetRadiusPolar_m": 1737400.0,
+					"PlanetRadius_m": 1737400.0,
+					"TraverseFrame": [ "EntityRef", "Moon" ]
+				},
+				"Source": "SurfaceOperations/SnapAssetToPlanet/bin/SnapAssetToPlanet",
+				"Type": "Normal"
+			},
+			{
+				"Nametag": "SnapPawnToPlanet",
+				"Active": true,
+				"FreqType": "Sim",
+				"Frequency": 60.0,
+				"Inst_Parameters": {
+					"AppliedToPawn": true,
+					"DatasetPriorities": [
+						"array",
+						"double",
+						0.0,
+						1.0,
+						2.0,
+						3.0
+					],
+					"Datasets": [
+						"array",
+						"string",
+						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters"
+					],
+					"DoSlowGraphicsStuff": true,
+					"LOD": 22.0,
+					"PlanetRadiusPolar_m": 1737400.0,
+					"PlanetRadius_m": 1737400.0,
+					"TraverseFrame": [ "EntityRef", "Moon" ],
+					"UpdateOnTick": true
+				},
+				"Source": "SurfaceOperations/SnapAssetToPlanet/bin/SnapAssetToPlanet",
+				"Type": "Normal"
+			},
+			{
+				"Nametag": "Spicy",
+				"Active": true,
+				"FreqType": "Sim",
+				"Frequency": 200.0,
+				"Inst_Parameters": {
+					"observer": "SSB",
+					"observerframe": "J2000"
+				},
+				"Singleton": true,
+				"Source": "Spicy/bin/Spicy",
+				"Type": "Normal"
+			},
+			{
+				"Nametag": "AttitudeEstimation",
+				"Active": false,
+				"Inst_Parameters": {
+					"Camera": [ "EntityRef", "CameraAndIMU" ],
+					"LoopFreqHz": 60.0
+				},
+				"Source": "Local/Repos/SPS-Star-Tracker/Systems/StarTrackerAttitudeEstimate.py",
+				"Type": "Python"
+			},
+			{
+				"Nametag": "SPS_GUI",
+				"Active": false,
+				"Inst_Parameters": {
+					"Camera": [ "EntityRef", "CameraAndIMU" ],
+					"CameraControl": {
+						"cameraDirection": 1.0,
+						"cameraPitchRate_deg_s": 30.0,
+						"cameraPitchRate_delta": 5.0,
+						"cameraPitch_deg": 50.0,
+						"cameraYawRate_deg_s": 30.0,
+						"cameraYawRate_delta": 5.0,
+						"cameraYaw_deg": -150.0
+					},
+					"J2000": [ "EntityRef", "SSB" ],
+					"LoopFreqHz": 60.0,
+					"Pawn": [ "EntityRef", "Spectator" ]
+				},
+				"Source": "Local/Repos/SPS/Systems/SPS_GUI.py",
+				"Type": "Python"
+			},
+			{
+				"Nametag": "SetupSPSAtLocation",
+				"Active": true,
+				"Inst_Parameters": {
+					"LoopFreqHz": 60.0,
+					"Pawn": [ "EntityRef", "Spectator" ],
+					"SPS": [ "EntityRef", "TripodBase" ],
+					"DatasetPriorities": [
+						"array",
+						"double",
+						0.0,
+						1.0,
+						2.0,
+						3.0
+					],
+					"Datasets": [
+						"array",
+						"string",
+						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters"
+					]
+				},
+				"Source": "Local/Repos/SPS-Star-Tracker/Systems/SetupSPSAtLocation.py",
+				"Type": "Python"
+			}
+		],
+		"Taskflows": []
+	},
+	"DataManager": {
+		"SimEntity": {
+			"Dynamics": {},
+			"GraphicsFrame": [ "EntityRef", "Moon" ],
+			"J2000Frame": [ "EntityRef", "SSB" ],
+			"Time": {
+				"StartDateTAI": [ "timestamp", "2026-02-20T10:19:11.000000Z" ],
+				"Timescale": 0.0,
+				"UseCurrentTime": false
+			}
+		},
+		"entities": [
+			{
+				"#Pawn": {
+					"BP_Path": "/Game/SpaceCraft_UI/FlatScreen/UIP2D_Surface.UIP2D_Surface_C",
+					"CamProjMatrix": [
+						"doubleM4x4",
+						0.9999998370793338,
+						0.0,
+						0.0,
+						0.0,
+						0.0,
+						1.7777777398050527,
+						0.0,
+						0.0,
+						0.0,
+						0.0,
+						0.0,
+						1.0,
+						0.0,
+						0.0,
+						10.0,
+						0.0
+					],
+					"Gadgets": {
+						"0": {
+							"IconTexture": "Texture2D'/Game/BuilderTools/WidgetImages/MainMenu/MSTV_MMIcon_Simulate.MSTV_MMIcon_Simulate'",
+							"Name": "Time",
+							"Slot": "TopLeft",
+							"Static": true,
+							"WidgetClass": "WidgetBlueprint'/Game/SpaceCraft_UI/FlatScreen/TimeManagement.TimeManagement'"
+						},
+						"1": {
+							"IconTexture": "Texture2D'/Game/SpaceCraft_UI/FlatScreen/CameraIcon_white.CameraIcon_white'",
+							"Name": "Camera",
+							"Slot": "TopRight",
+							"Static": true,
+							"WidgetClass": "WidgetBlueprint'/Game/SpaceCraft_UI/FlatScreen/W_CameraControl_Physical.W_CameraControl_Physical'"
+						},
+						"2": {
+							"IconTexture": "Texture2D'/Game/SpaceCraft_UI/FlatScreen/CameraIcon_white.CameraIcon_white'",
+							"Name": "SPSGuessr",
+							"Params": {
+								"Planet": [ "EntityRef", "Moon" ],
+								"TopDownCamera": [ "EntityRef", "TopDownCamera" ]
+							},
+							"Slot": "Right",
+							"Static": true,
+							"WidgetClass": "WidgetBlueprint'/Game/SpaceCRAFT_2_UI/InSim/Gadgets/SurfaceOperations/W_SPSGuessr.W_SPSGuessr'"
+						}
+					},
+					"GraphicsFrame": [ "EntityRef", "Moon" ],
+					"Is_Possessed": false,
+					"Role_Name": "Surface Explorer",
+					"Username": "(No User)"
+				},
+				"#Required": {
+					"Name": "Spectator",
+					"Systems": [ "SnapPawnToPlanet" ],
+					"Type": "Pawn"
+				},
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"ConstrainZAxisToPlanet": true,
+				"Dynamics": {
+					"Inertia_BodyFrame": [ "doubleM3x3",
+						1.0, 0.0, 0.0,
+						0.0, 1.0, 0.0,
+						0.0, 0.0, 1.0
+					],
+					"Mass": 1.0,
+					"Propagator": "Unreal_Pawn",
+					"ResidentFrame": [ "EntityRef", "Moon" ]
+				},
+				"Graphics": {
+					"RenderFar": true,
+					"Scale": 1.0
+				},
+				"Height": 1.8,
+				"Location": [ "doubleV3", -12329.0, -11299.0, -1739272.0 ],
+				"MovementSpeed": 10.0,
+				"NoClip": true,
+				"Rotation": [ "doubleV4", 0.0, 0.0, 0.0, 1.0 ],
+				"TransitionGraphicsFrame": false,
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Object_Loaded": {
+					"Materials": {
+						"0": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"Color_Scale": [
+									"doubleV4",
+									1.0,
+									1.0,
+									1.0,
+									1.0
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							},
+							"Name": "Tripod",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Normal.png"
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							}
+						}
+					},
+					"Mesh_Path": "Local/Repos/SPS/Models/SPS_TripodBase.glb",
+					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
+					"schema": [ "array", "int16", 4, 0, 0 ]
+				},
+				"#Required": {
+					"Name": "TripodBase",
+					"Systems": [ "SnapAssetToPlanet" ],
+					"Type": "Object_Loaded"
+				},
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AlignToSurfaceNormal": true,
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Dynamics": {
+					"Mass": 1.0,
+					"Propagator": "Custom",
+					"ResidentFrame": [ "EntityRef", "Moon" ]
+				},
+				"Graphics": {
+					"RenderFar": true,
+					"Scale": 1.0
+				},
+				"Height": 0.0,
+				"Location": [ "doubleV3", -12329.0, -11296.0, -1739272.0 ],
+				"RotateX": true,
+				"Rotation": [ "doubleV4", 0.7316866570919797, 0.2801448505732491, 0.5803302778825947, 0.22219421032863568 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Object_Loaded": {
+					"Materials": {
+						"0": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									1.0,
+									1.0,
+									1.0
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							},
+							"Name": "Tripod",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Normal.png"
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							}
+						}
+					},
+					"Mesh_Path": "Local/Repos/SPS/Models/SPS_TripodLeg.glb",
+					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
+					"schema": [ "array", "int16", 3, 0, 0 ]
+				},
+				"#Required": {
+					"Name": "TripodLeg1",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Dynamics": {
+					"Mass": 1.0,
+					"Propagator": "Custom",
+					"ResidentFrame": [ "EntityRef", "TripodBase" ]
+				},
+				"Graphics": {
+					"RenderFar": true,
+					"Scale": 1.0
+				},
+				"Location": [ "doubleV3", -0.3115259034983766, 0.5376948120374424, 0.30940875994419037 ],
+				"RotateX": true,
+				"Rotation": [ "doubleV4", -0.016928, 0.258264, -0.866314, -0.427216 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Object_Loaded": {
+					"Materials": {
+						"0": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									1.0,
+									1.0,
+									1.0
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							},
+							"Name": "Tripod",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Normal.png"
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							}
+						}
+					},
+					"Mesh_Path": "Local/Repos/SPS/Models/SPS_TripodLeg.glb",
+					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
+					"schema": [ "array", "int16", 3, 0, 0 ]
+				},
+				"#Required": {
+					"Name": "TripodLeg2",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Dynamics": {
+					"Mass": 1.0,
+					"Propagator": "Custom",
+					"ResidentFrame": [ "EntityRef", "TripodBase" ]
+				},
+				"Graphics": {
+					"RenderFar": true,
+					"Scale": 1.0
+				},
+				"Location": [ "doubleV3", -0.29806952266745707, -0.5190184812680665, 0.34900109082150327 ],
+				"RotateX": true,
+				"Rotation": [ "doubleV4", -0.232127, 0.114474, -0.063172, -0.963858 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Object_Loaded": {
+					"Materials": {
+						"0": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									1.0,
+									1.0,
+									1.0
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							},
+							"Name": "Tripod",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Normal.png"
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							}
+						}
+					},
+					"Mesh_Path": "Local/Repos/SPS/Models/SPS_TripodLeg.glb",
+					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
+					"schema": [ "array", "int16", 3, 0, 0 ]
+				},
+				"#Required": {
+					"Name": "TripodLeg3",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Dynamics": {
+					"Mass": 1.0,
+					"Propagator": "Custom",
+					"ResidentFrame": [ "EntityRef", "TripodBase" ]
+				},
+				"Graphics": {
+					"RenderFar": true,
+					"Scale": 1.0
+				},
+				"Location": [ "doubleV3", 0.6306286590202014, 0.0013280597181831173, 0.2913022245865398 ],
+				"RotateX": true,
+				"Rotation": [ "doubleV4", -0.143789, -0.215201, 0.536634, -0.803142 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Object_Loaded": {
+					"Materials": {
+						"0": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									1.0,
+									1.0,
+									1.0
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							},
+							"Name": "Tripod",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_Normal.png"
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/T_Tripod_MetallicRoughness.png"
+							}
+						},
+						"1": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									1.0,
+									1.0,
+									1.0
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_Color.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": 1.0,
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Name": "Aluminum",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_NormalDX.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_Roughness.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							}
+						},
+						"2": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.7,
+									0.6,
+									0.55
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_Color.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": 1.0,
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Name": "Aluminum_Coated",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_NormalDX.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_Roughness.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							}
+						},
+						"3": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.484818,
+									0.245024,
+									0.054613
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_Color.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Metallic": {
+								"Channels": "B",
+								"Source": 1.0,
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Name": "Copper",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_NormalDX.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							},
+							"Roughness": {
+								"Channels": "G",
+								"Source": "Local/Repos/SPS/Models/Textures/Metal032_2K-JPG_Roughness.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									4.0,
+									4.0
+								]
+							}
+						},
+						"4": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.484818,
+									0.245024,
+									0.054613
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/F203-00A-212-00-top-view-500px.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "R",
+								"Source": 1.0,
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Name": "Material",
+							"Roughness": {
+								"Channels": "R",
+								"Invert": true,
+								"Source": "Local/Repos/SPS/Models/Textures/F203-00A-212-00-top-view-500px.jpg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							}
+						},
+						"5": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.484818,
+									0.245024,
+									0.054613
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/T_SPS_Display_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Emissive": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/T_SPS_Display_Color.png",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"EmissiveStrength": 200000.0,
+							"Metallic": {
+								"Channels": "R",
+								"Source": 0.0,
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Name": "M_SPS_Display",
+							"Roughness": {
+								"Channels": "R",
+								"Invert": false,
+								"Source": 0.02,
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							}
+						},
+						"6": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.484818,
+									0.245024,
+									0.054613
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_body_Base.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Emissive": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_body_Emis.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"EmissiveStrength": 200000.0,
+							"Metallic": {
+								"Channels": "R",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_body_Meta.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Name": "camera_body",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_body_Norm.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Roughness": {
+								"Channels": "R",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_body_Roug.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							}
+						},
+						"7": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.484818,
+									0.245024,
+									0.054613
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_lense_Bas.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "R",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_lense_Met.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Name": "camera_lense",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_lense_Nor.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Roughness": {
+								"Channels": "R",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_lense_Rou.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							}
+						},
+						"8": {
+							"Albedo": {
+								"Channels": "RGBA",
+								"ColorScale": [
+									"doubleV3",
+									0.484818,
+									0.245024,
+									0.054613
+								],
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_case_Base.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Metallic": {
+								"Channels": "R",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_case_Meta.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Name": "camera_case",
+							"Normal": {
+								"Channels": "RGB",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_case_Norm.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							},
+							"Roughness": {
+								"Channels": "R",
+								"Source": "Local/Repos/SPS/Models/Textures/present_24_Blackmagic_low_camera_case_Roug.jpeg",
+								"UV_Scale": [
+									"doubleV2",
+									1.0,
+									1.0
+								]
+							}
+						}
+					},
+					"Mesh_Path": "Local/Repos/SPS/Models/SPS_CameraAndIMU.glb",
+					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
+					"schema": [ "array", "int16", 3, 0, 0 ]
+				},
+				"#Required": {
+					"Name": "CameraAndIMU",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Dynamics": {
+					"Mass": 1.0,
+					"Propagator": "Custom",
+					"ResidentFrame": [ "EntityRef", "TripodBase" ]
+				},
+				"Graphics": {
+					"RenderFar": true,
+					"Scale": 1.0
+				},
+				"Location": [ "doubleV3", 0.0, 0.0, 1.39142 ],
+				"RotateX": true,
+				"Rotation": [ "doubleV4", 3.3813515522625497e-09, 0.4226182497380068, -1.336140125184882e-06, 0.9063077926326124 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Required": {
+					"Name": "TopDownCamera",
+					"Type": "Camera",
+					"Systems": []
+				},
+				"#Camera": {
+
+				}
+			}
+		]
+	}
+}

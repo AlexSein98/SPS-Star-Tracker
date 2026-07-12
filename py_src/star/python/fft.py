@@ -2,19 +2,24 @@ from PIL import Image
 import tifffile
 from tifffile import imwrite
 
+import copy
 import numpy as np
 from matplotlib import pyplot as plt
 
 
 thisDir = "./py_src/star/"
 
-imgs = [thisDir + "data/Apertures/Aperture_Hexagon_Small.png",
-        thisDir + "data/Apertures/Aperture_Hexagon_Medium.png",
-        thisDir + "data/Apertures/Aperture_Hexagon_Large.png"]
+# imgs = [thisDir + "data/Apertures/Aperture_Hexagon_Small.png",
+#         thisDir + "data/Apertures/Aperture_Hexagon_Medium.png",
+#         thisDir + "data/Apertures/Aperture_Hexagon_Large.png"]
 
-imgOutputs = [thisDir + 'python/output/fft/Aperture_Hexagon_Small.tif',
-              thisDir + 'python/output/fft/Aperture_Hexagon_Medium.tif',
-              thisDir + 'python/output/fft/Aperture_Hexagon_Large.tif']
+imgs = [thisDir + "data/RealLensAperture.png",
+        thisDir + "data/RealLensAperture.png",
+        thisDir + "data/RealLensAperture.png"]
+
+imgOutputs = [thisDir + 'python/output/fft/Aperture_Circle_Small.tif',
+              thisDir + 'python/output/fft/Aperture_Circle_Medium.tif',
+              thisDir + 'python/output/fft/Aperture_Circle_Large.tif']
 
 for index in range(len(imgs)):
     img = Image.open(imgs[index])
@@ -25,6 +30,7 @@ for index in range(len(imgs)):
 
     f = np.fft.fft2(img_array)
     fshift = np.fft.fftshift(f)
+    fshift = fshift ** 10
 
     centerU = float(fshift.shape[0]) / 2.0
     centerV = float(fshift.shape[1]) / 2.0
@@ -43,6 +49,7 @@ for index in range(len(imgs)):
                                                 (float(j) - gradient_radius) ** 2) / gradient_radius, 0.0, 1.0)
 
     magnitude_spectrum *= gradient
+    magnitude_spectrum /= np.linalg.norm(magnitude_spectrum)
 
     print(f'Max = {np.max(magnitude_spectrum)}')
     print(f'Min = {np.min(magnitude_spectrum)}')

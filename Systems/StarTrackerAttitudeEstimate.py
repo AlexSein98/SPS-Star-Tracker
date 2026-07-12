@@ -82,7 +82,7 @@ graphics = False # set True for graphics throughout the solve process
 np.set_printoptions(suppress=True)
 
 home = os.path.join(st.path_utils.GetLocalAssetsDir(), "Repos", "SPS-Star-Tracker")
-imgSourceDir = os.path.join(home, "output", "StarImages")
+imgSourceDir = os.path.join(home, "output", "SPSGuessr")
 
 st.logger_info(f"imgSourceDir = {imgSourceDir}")
 

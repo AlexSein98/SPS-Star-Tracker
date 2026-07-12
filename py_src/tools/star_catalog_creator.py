@@ -59,7 +59,7 @@ import star_tracker.cam_matrix as cam_matrix
 #USER-INPUT VARS
 #############################################################
 b_thresh = 6.0  # brightness threshold, recommend 5-6 to start with
-cam_config_file = '' #the name of the camera config file in /data
+cam_config_file = 'perfect_cam.json' #the name of the camera config file in /data
 
 
 #############################################################

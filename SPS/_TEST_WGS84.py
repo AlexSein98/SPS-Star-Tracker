@@ -25,3 +25,14 @@ def latitude_pg_to_pc(phi_pg: float, a: float, b: float) -> float:
 
 lat_pc = latitude_pg_to_pc(lat_true, radius, radius_polar)
 print(f"lat_pc = {lat_pc}")
+
+xyz_assumed_pc = radius * latlon_to_T(lat_true, lon_true)[:, 0]
+print(f"xyz_assumed_pc = {xyz_assumed_pc}")
+
+xyz_scaled = np.multiply(xyz_assumed_pc, np.array([1.0, 1.0, radius_polar / radius]))
+print(f"xyz_scaled = {xyz_scaled}")
+
+lat2, lon2, alt2 = cartesian_to_planetographic(xyz_scaled, radius, radius_polar)
+print(f"lat2 = {lat2}")
+print(f"lon2 = {lon2}")
+print(f"alt2 = {alt2}")

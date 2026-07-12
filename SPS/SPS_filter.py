@@ -80,8 +80,16 @@ class ModifiedRodriguesParameters:
             / (1.0 + self.sigmaSquared)
         return T
 
+    def ToQuat(self) -> Quaternion:
+        qw = (1.0 - self.sigmaSquared) / (1.0 + self.sigmaSquared)
+        qv = 2.0 * np.array([self.sigma1, self.sigma2, self.sigma3]) / (1.0 + self.sigmaSquared)
+        return Quaternion(qw, qv[0], qv[1], qv[2])
+
     def ToVector(self) -> npt.NDArray:
         return np.array([self.sigma1, self.sigma2, self.sigma3])
+
+    def shadow(self):
+        return ModifiedRodriguesParameters.FromVector(-self.ToVector() / self.sigmaSquared)
 
     def dSigma_dsigma(self, s: float, dsigma_x: npt.NDArray, dsigma_xx: npt.NDArray) -> npt.NDArray:
         deriv: npt.NDArray = (8.0 * dsigma_xx + 8.0 * s * self.sigma_x - 
@@ -123,6 +131,10 @@ class ModifiedRodriguesParameters:
 if __name__ == "__main__":
     np.set_printoptions(suppress=True)
 
+    delete_old = False
+    regenerate_catalog = True
+    reprocess_star_tracker = True
+
     planet = globalConfig.planet
     gravModel: grav_base = planet.gravModel
     dem = ReadDEM(planet.demName)
@@ -144,7 +156,6 @@ if __name__ == "__main__":
     bias = np.linalg.cholesky(biasSigma_2) @ np.random.randn(3)
 
     # Delete all old images
-    delete_old = False
     if delete_old:
         if os.path.exists(globalConfig.renderDir):
             shutil.rmtree(globalConfig.renderDir)
@@ -165,6 +176,7 @@ if __name__ == "__main__":
     etJ2000 = spice.str2et(tJ2000)
     etNow = spice.str2et(tNow)
     etOriginal = copy.deepcopy(etNow)
+    times = etOriginal + dt + dt * np.linspace(0.0, numImages - 1, numImages)
     
     idx = 0
     numImages = int(0.25 * 8640)
@@ -190,9 +202,9 @@ if __name__ == "__main__":
     printInterval: int = 10
 
     # Something like Connecting Ridge
-    # phi_pg_0: float = -89.45
-    # lon_pg_0: float = -137.2
-    # h_ellp_0: float = 1960.0
+    phi_pg_0: float = -89.45
+    lon_pg_0: float = -137.2
+    h_ellp_0: float = 1960.0
 
     # Something like Apollo 17
     # phi_pg_0: float = 20.19
@@ -200,9 +212,9 @@ if __name__ == "__main__":
     # h_ellp_0: float = -2500.0
 
     # Something with low gravity variation
-    phi_pg_0: float = 4.0
-    lon_pg_0: float = -29.4
-    h_ellp_0: float = 0.0
+    # phi_pg_0: float = 4.0
+    # lon_pg_0: float = -29.4
+    # h_ellp_0: float = 0.0
     
     cameraPosPlanetFixed = planetographic_to_cartesian(phi_pg_0, lon_pg_0, h_ellp_0, radiusEquatorial, radiusPolar)
     cameraPosPlanetFixed = SnapToSurface(cameraPosPlanetFixed, planet, dem)
@@ -239,7 +251,8 @@ if __name__ == "__main__":
             if addMeasurementNoise:
                 g_IMU_frame += np.linalg.cholesky(sigma_2) @ np.random.randn(3)
             
-            measured_accelerations.append(np.array([-np.linalg.norm(g_IMU_frame), 0.0, 0.0]))
+            measured_accelerations.append(g_IMU_frame)
+            # measured_accelerations.append(np.array([-np.linalg.norm(g_IMU_frame), 0.0, 0.0]))
 
             gInertial_true = (planetRot.T @ np.array([g_true]).T).T[0]
             gInertial = (planetRot.T @ T_P_G.T @ np.array([g_IMU_frame]).T).T[0]
@@ -284,7 +297,10 @@ if __name__ == "__main__":
     ####    Obtain Attitude Estimates    ####
     #########################################
 
-    if delete_old:
+    if regenerate_catalog:
+        etOriginal
+
+    if reprocess_star_tracker:
         Path(attitudeEstDataPath).unlink(missing_ok=True)
 
     if not Path(attitudeEstDataPath).is_file():
@@ -445,7 +461,6 @@ if __name__ == "__main__":
         exit(0)
 
     # Initialize all inertial-to-planet attitude matrices
-    times = etOriginal + dt + dt * np.linspace(0.0, numImages - 1, numImages)
     T_i_b_list: list[npt.NDArray] = []
     T_i_c_list: list[npt.NDArray] = []
     g_est_list: list[npt.NDArray] = []
@@ -476,7 +491,7 @@ if __name__ == "__main__":
     print(f"Initial guess: {ModifiedRodriguesParameters.FromVector(s_0).ToMatrix()}\n")
 
     ds: npt.NDArray = np.zeros(3)
-    eps: float = 1e-5
+    eps: float = 7e-5
     iteration: int = 0
     hasPriorEstimate: bool = False
 
@@ -495,7 +510,7 @@ if __name__ == "__main__":
         s_0_MRP = ModifiedRodriguesParameters.FromVector(s_0)
         derivs = s_0_MRP.dT_dsigma()
         
-        Pvv = np.diag(np.array([1.0, 1.0, 1.0])) * 1e-6
+        Pvv = np.diag(np.array([1.0, 1.0, 1.0])) * 1e-8
         Pvv_inv = np.linalg.inv(Pvv)
         
         # print(f"g_truth = {g_truth}")
@@ -525,9 +540,15 @@ if __name__ == "__main__":
 
         Pss_0 = np.linalg.inv(Lam)
         ds = Pss_0 @ lam
-        s_0 += ds
+        # s_0 += 1e3 * np.linalg.norm(ds) * ds
+        s_0 += 0.1 * ds
 
-        print(f"ds    = {ds}")
+        # s_0_MRP = ModifiedRodriguesParameters.FromVector(s_0)
+        # if s_0_MRP.sigmaSquared > 1.0:
+        #     s_0_MRP = s_0_MRP.shadow()
+        #     s_0 = s_0_MRP.ToVector()
+
+        print(f"|ds| = {np.linalg.norm(ds)}")
         # print(f"s_0   = {s_0}")
         # print(f"Pss_0 = {Pss_0}")
 

@@ -28,3 +28,8 @@ py_src/star_tracker/COTS_star_tracker.egg-info/*
 
 !py_src/star/data/*
 !py_src/star/data/textures/*
+data/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif.aux.xml
+data/Mars_global_463m.tif.aux.xml
+/output/StarImages
+/py_src/star/data/textures
+/py_src/star/python/output/fft

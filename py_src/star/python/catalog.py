@@ -1,6 +1,7 @@
 import csv
 import json
 import sys
+import pandas as pd
 
 from py_src.star.python.transformations import *
 
@@ -33,6 +34,13 @@ def arc_to_degrees(angleInArcTime: str):
         return float(angleInArcTime[0:3]) - float(angleInArcTime[5:7]) / 60.0 - float(angleInArcTime[9:11]) / 3600.0
     else:
         return float(angleInArcTime[0:3]) + float(angleInArcTime[5:7]) / 60.0 + float(angleInArcTime[9:11]) / 3600.0
+
+
+# Ballesteros' formula
+# Source: https://en.wikipedia.org/wiki/Color_index
+def BV_to_temp(BV: float) -> float:
+    T = 4600.0 * (1.0 / (0.92 * BV + 1.7) + 1.0 / (0.92 * BV + 0.62))
+    return T
 
 
 # Source: https://tannerhelland.com/2012/09/18/convert-temperature-rgb-algorithm-code.html
@@ -125,9 +133,62 @@ def read_json_catalog(catalogPath: str):
         return catalog
 
 
-def export_json_catalog_to_csv(catalogPath: str, home: str=".\\py_src\\star\\"):
+def read_tsv_catalog(catalogPath: str, cutoffMagnitude: float = 12.0):    
+    catalog = []
+    catalogTSV = pd.read_csv(catalogPath, sep='\t')
+
+    # i = 0
+    for index, row in catalogTSV.iterrows():
+        # Right ascension, declination, and associated proper motion
+        rightAscension = float(row["RAJ2000"])
+        declination = float(row["DEJ2000"])
+        properMotionRA = 0.001 * float(row["pmRA"])
+        properMotionDE = 0.001 * float(row["pmDE"])
+
+        # print(f"Expected {row["RAJ2000"]}, received {rightAscension}")
+        # print(f"Expected {row["DEJ2000"]}, received {declination}\n")
+
+        # Parallax
+        parallax = 0.001 * float(row["Plx"])
+        
+        # Right ascension and declination unit vectors
+        pHat_i = p_hat(rightAscension, declination)
+        qHat_i = q_hat(rightAscension, declination)
+        
+        # Magnitude
+        vMag = float(row["Hpmag"])
+        
+        # Temperature (and color)
+        temp = BV_to_temp(row["B-V"])
+        r, g, b = temp_to_rgb(temp)
+
+        # Output for this star
+        # CATALOG INDEX MAP:
+        # 0     1       2       3       4           5 6 7   8 9 10      11      12    13 14 15
+        # RA    Dec     mu_RA   mu_Dec  parallax    p_hat   q_hat       vMag    T     RGB
+        if (vMag <= cutoffMagnitude):
+            catalog.append([rightAscension, declination, properMotionRA, properMotionDE, 
+                            parallax, pHat_i[0], pHat_i[1], pHat_i[2], 
+                            qHat_i[0], qHat_i[1], qHat_i[2], vMag, temp, r, g, b])
+        
+        # i += 1
+        # if i > 10:
+            # break
+    return catalog
+
+
+def export_json_catalog_to_csv(catalogPath: str, home: str="./py_src/star/"):
     catalog = read_json_catalog(catalogPath)
-    with open(home + "data\\catalog.csv", "w") as catalogCSV:
+    with open(home + "data/catalog.csv", "w") as catalogCSV:
+        writer = csv.writer(catalogCSV, delimiter=',', quotechar='"', lineterminator='\n')
+        for line in catalog:
+            writer.writerow(line)
+
+
+def export_tsv_catalog_to_csv(catalogPath: str, home: str="./py_src/star/", 
+                              cutoffMagnitude: float = 12.0):
+    catalog = read_tsv_catalog(catalogPath, cutoffMagnitude)
+    with open(home + "data/catalog.csv", "w") as catalogCSV:
         writer = csv.writer(catalogCSV, delimiter=',', quotechar='"', lineterminator='\n')
         for line in catalog:
             writer.writerow(line)
@@ -163,17 +224,18 @@ def subset_catalog_by_magnitude(catalog, magnitudeCutoff: float):
 
 
 if __name__ == "__main__":
-    home: str = ".\\py_src\\star\\"
-    if len(sys.argv) > 1:
-        home = sys.argv[1]
+    # home: str = "./py_src/star/"
+    home: str = "./"
     
     # TEST 1: READ ORIGINAL (JSON) BRIGHT STAR CATALOG (BSC)
-    # read_json_catalog(home + "data\\bsc5-all.json")
+    # read_json_catalog(home + "data/bsc5-all.json")
+    # read_tsv_catalog(home + "data/starcat_hip.tsv")
 
     # TEST 2: CONVERT ORIGINAL BSC TO CSV
-    export_json_catalog_to_csv(home + "data\\bsc5-all.json", home)
+    # export_json_catalog_to_csv(home + "data/bsc5-all.json", home)
+    export_tsv_catalog_to_csv(home + "data/starcat_hip.tsv", home, cutoffMagnitude=8)
 
     # TEST 3: READ CSV VERSION OF BSC CATALOG AND PRINT
-    # catalog = read_csv_catalog(home + "data\\catalog.csv")
+    # catalog = read_csv_catalog(home + "data/catalog.csv")
     # print(catalog)
     pass
