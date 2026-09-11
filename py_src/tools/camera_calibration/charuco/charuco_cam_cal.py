@@ -27,13 +27,14 @@ import numpy as np
 #USER INPUT
 ################################
 show_plots = True
+plot_time_ms = 1000
 img_extension = '.png'
 
 # Define ChArUco target
-number_of_target_rows = 8
-number_of_target_columns = 11
-aruco_square_size = 0.090066  # m
-checker_square_size = 0.124826  # m
+number_of_target_rows = 11
+number_of_target_columns = 15
+aruco_square_size = 0.011  # m
+checker_square_size = 0.015  # m
 
 
 ################################
@@ -59,8 +60,9 @@ checker_world_points[0,:,:2] = checker_square_size*np.mgrid[0:CHECKERBOARD[0], 0
 prev_img_shape = None
 
 # Create the ChArUco board dictionary
-dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
+dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
 Charuco_board = cv2.aruco.CharucoBoard((number_of_target_columns, number_of_target_rows), checker_square_size, aruco_square_size, dictionary)
+charuco_detector = cv2.aruco.CharucoDetector(Charuco_board)
 
 # Extracting path of individual image stored in a given directory
 images = glob.glob('./CameraCalibration/ChArUco/*'+img_extension)
@@ -99,49 +101,39 @@ for fname in images:
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
     # Detect ArUco markers
-    corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, dictionary)
-    # print(rejectedImgPoints)
-    # print(corners)
+    charuco_corners, charuco_ids, marker_corners, marker_ids = charuco_detector.detectBoard(gray)
 
     """
     If desired number of corner are detected, refine the pixel coordinates and display 
     them on the images of checker board
     """
-    if ids is not None:
-        # Refine the detected corners and obtain the ChArUco corners and ids
-        num_corners, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
-            corners, ids, gray, board=Charuco_board)
-
-        print("    Detected "+str(len(corners))+" corners")
-
-        # cv2.imshow(img)
-        # If the entire ChArUco board is detected
-        if charuco_corners is not None and num_corners==16:
+    if charuco_ids is not None:
+        num_corners = len(charuco_corners)
+        print("    Detected " + str(len(marker_ids)) + " markers, " + str(num_corners) + " ChArUco corners")
+         # cv2.imshow(img)
+         # If the entire ChArUco board is detected
+        if charuco_corners is not None and num_corners == (CHECKERBOARD[0] * CHECKERBOARD[1]):
             found_corner_ctr += 1
             print("    FOUND all ArUco markers in: "+fname)
 
             charuco_img_points.append(charuco_corners)
             charuco_ids_tot.append(charuco_ids)
 
-            # Extract the checkerboard corners
-            checkerboard_corners = []
-            for corner in charuco_corners:
-                checkerboard_corners.append(corner[0])
-
             checker_world_points_tot.append(checker_world_points)
-            checkerboard_corners = np.asarray(checkerboard_corners)
-            corners2 = cv2.cornerSubPix(gray, checkerboard_corners, (11,11),(-1,-1), criteria)
-            checker_img_points.append(corners2)
-            #print(checkerboard_corners)
 
-            # Draw the detected corners on the image
+            checker_img_points.append(charuco_corners.reshape(-1, 1, 2).astype(np.float32))
+
             if show_plots:
-                #img = cv2.aruco.drawDetectedCornersCharuco(img, charuco_corners, charuco_ids)
-                img = cv2.drawChessboardCorners(img, CHECKERBOARD, checkerboard_corners, True)
-
-                # Show the image
-                cv2.imshow('ChArUco Reprojection', img)
-                cv2.waitKey(1)
+                # Draw the detected corners on the image
+                img_drawn = cv2.aruco.drawDetectedCornersCharuco(
+                    img, 
+                    charuco_corners.reshape(-1, 1, 2), 
+                    charuco_ids
+                )
+                
+                # Resize the window so it doesn't overflow high-res monitors
+                cv2.imshow('ChArUco Reprojection', cv2.resize(img_drawn, (800, 600)))
+                cv2.waitKey(plot_time_ms)
     else:
         print("    DID NOT FIND corners in: "+fname)
 
