@@ -1,4 +1,5 @@
 import numpy as np
+import spaceteams as st
 from SPS.gravity import *
 
 
@@ -17,7 +18,7 @@ class GlobalConfig:
         self.tNow = tNow
 
         self.nameTitle = self.planet.planetName.title()
-        self.outputDir = "./output/" + self.nameTitle + "/"
+        self.outputDir = planet.rootDir + "output/" + self.nameTitle + "/"
         self.renderDir = self.outputDir + "Renders/"
 
         os.makedirs(self.outputDir, exist_ok=True)
@@ -30,10 +31,12 @@ _moonGrav: grav_base = grav_moon_GRAIL150()
 _marsGrav: grav_base = grav_mars_MRO110B2()
 _phobosGrav: grav_base = grav_phobos_basic()
 
-_earth = Planet("EARTH", "./data/Earth_1arcmin.tif", "m", 6378136.3, "ITRF93", _earthGrav)
-_moon = Planet("MOON", "./data/ldem_64.tif", "km", 1737400.0, "MOON_PA", _moonGrav)
-_mars = Planet("MARS", "./data/Mars_global_463m.tif", "m", 3396190.0, "IAU_MARS", _marsGrav)
-_phobos = Planet("PHOBOS", "./data/Phobos_2ppd.tif", "m", 10993.0, "IAU_PHOBOS", _phobosGrav)
+rootDir = str(st.path_utils.AssetPathToReal(st.AssetType.Generic, "Local/Repos/SPS-Star-Tracker/"))
+
+_earth = Planet("EARTH", rootDir, "data/Earth_1arcmin.tif", "m", 6378136.3, "ITRF93", _earthGrav)
+_moon = Planet("MOON", rootDir, "data/ldem_64.tif", "km", 1737400.0, "MOON_PA", _moonGrav)
+_mars = Planet("MARS", rootDir, "data/Mars_global_463m.tif", "m", 3396190.0, "IAU_MARS", _marsGrav)
+_phobos = Planet("PHOBOS", rootDir, "data/Phobos_2ppd.tif", "m", 10993.0, "IAU_PHOBOS", _phobosGrav)
 _planets = [_earth, _moon, _mars, _phobos]
 
 ##################################

@@ -50,7 +50,7 @@ def exr_to_numpy(filepath: str, channel_name: str = 'Z') -> np.ndarray:
 
 
 thisDir: str = "./py_src/star/"
-filePath: str = thisDir + "data/textures/milkyway_2020_4k.exr"
+filePath: str = thisDir + "data/textures/milkyway_2020_16k.exr"
 
 
 imgArrayR = exr_to_numpy(filePath, 'R')

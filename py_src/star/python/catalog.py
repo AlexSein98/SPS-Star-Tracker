@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
     # TEST 2: CONVERT ORIGINAL BSC TO CSV
     # export_json_catalog_to_csv(home + "data/bsc5-all.json", home)
-    export_tsv_catalog_to_csv(home + "data/starcat_hip.tsv", home, cutoffMagnitude=8)
+    export_tsv_catalog_to_csv(home + "data/starcat_hip.tsv", home, cutoffMagnitude=10)
 
     # TEST 3: READ CSV VERSION OF BSC CATALOG AND PRINT
     # catalog = read_csv_catalog(home + "data/catalog.csv")

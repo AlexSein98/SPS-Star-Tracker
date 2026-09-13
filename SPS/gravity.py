@@ -16,10 +16,11 @@ import numpy.typing as npt
 
 
 class Planet:
-    def __init__(self, planetName: str, demName: str, demUnits: str, 
+    def __init__(self, planetName: str, rootDir: str, demName: str, demUnits: str, 
                  radius_m: float, planetFrame: str, gravModel: grav_base):
         self.planetName = planetName
-        self.demName = demName
+        self.rootDir = rootDir
+        self.demName = rootDir + "/" + demName
         self.demUnits = demUnits
         self.radius = radius_m
         self.planetFrame = planetFrame

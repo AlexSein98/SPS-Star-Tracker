@@ -3,8 +3,10 @@ from SPS.gravity import *
 from SPS.SPS_samples import ReadDEM, SampleGlobalDEM_LatLon
 from SPS.global_config import *
 
+import numpy as np
 import sys
 import os
+import subprocess
 import csv
 import copy
 import time
@@ -431,7 +433,7 @@ def estimate_position(truthDataPath: str, estDataPath: str, gravEstDataPath: str
 
 
 if __name__ == "__main__":
-    os.system('cls')
+    subprocess.run(['cls'])
 
     planet = globalConfig.planet
     gravModel: grav_base = planet.gravModel
