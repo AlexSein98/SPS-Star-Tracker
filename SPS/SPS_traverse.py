@@ -15,6 +15,7 @@ import datetime
 import psutil
 import matplotlib.pyplot as plt
 from pathlib import Path
+import hashlib
 
 import spaceteams as st
 
@@ -23,7 +24,7 @@ os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
 
 
 #####################################
-####    Classes and Functions    ####
+####    CLASSES AND FUNCTIONS    ####
 #####################################
 
 def rad_to_arcsec(rad: float) -> float:
@@ -135,9 +136,70 @@ class ModifiedRodriguesParameters:
 if __name__ == "__main__":
     np.set_printoptions(suppress=True)
 
-    delete_old = False
-    regenerate_catalog = False
-    reprocess_star_tracker = False
+    #################################
+    ####    GLOBAL PARAMETERS    ####
+    #################################
+
+    delete_old: bool                = True
+    reprocess_star_tracker: bool    = True
+    doCpp: bool                     = True
+    doCalibration: bool             = True
+    
+    calibrationCutoff: int = 300
+    endpoint: int = calibrationCutoff + 200
+
+    numImages: int = calibrationCutoff + 200
+    
+    ##############################
+    ####    SITE SELECTION    ####
+    ##############################
+
+    # site: str = "Ideal"
+    # site: str = "Apollo15"
+    # site: str = "Apollo17"
+    site: str = "ConnectingRidge"
+    # site: str = "NobileRim1"
+
+    hash_object = hashlib.sha256(site.encode('utf-8'))
+    int_seed = int(hash_object.hexdigest(), 16)
+
+    phi_pg_0: float = 0.0
+    lon_pg_0: float = 0.0
+    h_ellp_0: float = 0.0
+
+    if site == "Ideal":
+        # Something with low gravity variation (ideal)
+        phi_pg_0 = 4.0
+        lon_pg_0 = -29.4
+        h_ellp_0 = 0.0
+
+    elif site == "Apollo15":
+        # Something like Apollo 15
+        phi_pg_0 = 26.13
+        lon_pg_0 = 3.63
+        h_ellp_0 = -1931.0
+
+    elif site == "Apollo17":
+        # Something like Apollo 17
+        phi_pg_0 = 20.19
+        lon_pg_0 = 30.77
+        h_ellp_0 = -2500.0
+
+    elif site == "ConnectingRidge":
+        # Something like Connecting Ridge
+        phi_pg_0 = -89.45
+        lon_pg_0 = -137.2
+        h_ellp_0 = 1960.0
+
+    elif site == "NobileRim1":
+        # Something like Nobile Rim 1
+        phi_pg_0 = -85.4
+        lon_pg_0 = 35.3
+        h_ellp_0 = 1743.0
+
+    #################################
+    ####    PLANET PARAMETERS    ####
+    #################################
 
     planet = globalConfig.planet
     gravModel: grav_base = planet.gravModel
@@ -147,7 +209,10 @@ if __name__ == "__main__":
     attitudeEstDataPath = globalConfig.outputDir + "attitudes_" + globalConfig.nameTitle + ".csv"
     gravEstDataPath = globalConfig.outputDir + "measurements_" + planet.planetName.title() + ".csv"
 
-    # Error sources
+    #############################
+    ####    ERROR SOURCES    ####
+    #############################
+
     addMeasurementBias: bool = globalConfig.addMeasurementBias
     addMeasurementNoise: bool = globalConfig.addMeasurementNoise
     
@@ -158,6 +223,10 @@ if __name__ == "__main__":
                             [0.0, 0.15 ** 2, 0.0],
                             [0.0, 0.0, 0.15 ** 2]])
     bias = np.linalg.cholesky(biasSigma_2) @ np.random.randn(3)
+
+    ############################
+    ####    RENDER SETUP    ####
+    ############################
 
     # Delete all old images
     if delete_old:
@@ -180,13 +249,18 @@ if __name__ == "__main__":
     etJ2000 = spice.str2et(tJ2000)
     etNow = spice.str2et(tNow)
     etOriginal = copy.deepcopy(etNow)
-    dt = 1.0
+    calibrationTimeStep_s: float = 1.0
+    traverseTimeStep_s: float = 100.0
     
     idx = 0
-    numImages = int(0.25 * 8640)
     true_data = []
     measured_accelerations = []
-    times = etOriginal + dt + dt * np.linspace(0.0, numImages - 1, numImages)
+    times_calibration = etOriginal + calibrationTimeStep_s * np.linspace(0.0, calibrationCutoff - 1, calibrationCutoff)
+    times_traverse = times_calibration[-1] + traverseTimeStep_s + traverseTimeStep_s * np.linspace(
+        0.0, endpoint - calibrationCutoff - 1, endpoint - calibrationCutoff)
+    times = np.concat((times_calibration, times_traverse))
+
+    print(f"Times = {np.round(times[calibrationCutoff - 5:calibrationCutoff + 5] - etOriginal, 1)}")
 
     # Gravity model
     maxDegree: int = globalConfig.grav_maxDegree
@@ -205,47 +279,74 @@ if __name__ == "__main__":
     startTime = time.perf_counter()
     elapsedSeconds: float = 0.0
     printInterval: int = 10
-
-    # Something like Connecting Ridge
-    phi_pg_0: float = -89.45
-    lon_pg_0: float = -137.2
-    h_ellp_0: float = 1960.0
-
-    # Something like Apollo 17
-    # phi_pg_0: float = 20.19
-    # lon_pg_0: float = 30.77
-    # h_ellp_0: float = -2500.0
-
-    # Something with low gravity variation
-    # phi_pg_0: float = 4.0
-    # lon_pg_0: float = -29.4
-    # h_ellp_0: float = 0.0
     
     cameraPosPlanetFixed = planetographic_to_cartesian(phi_pg_0, lon_pg_0, h_ellp_0, radiusEquatorial, radiusPolar)
     cameraPosPlanetFixed = SnapToSurface(cameraPosPlanetFixed, planet, dem)
     lat_pc, lon_pc, h_pc = r_to_latlonalt(cameraPosPlanetFixed, planet.radius)
 
+    ###################################
+    ####    TRAVERSE PARAMETERS    ####
+    ###################################
+    
+    # Random number generator
+    rng = np.random.default_rng(int_seed)
+
+    # Assume crew takes SPS measurements every X meters. To find X, assume 0.5 m/s walking 
+    # speed based on Apollo estimates, science objectives slowing down the crew, etc.
+    traverseStep_m: float = 50.0
+
+    # Assume SPS measurement time per stop is 60 seconds
+    # TODO: Unimplemented for now
+    traverseMeasurementWaitTime: float = 60.0
+
+    # Assume crew deviates from planned traverse by some Gaussian noise with a 1-sigma of 5 meters per 50-meter step
+    traverseFollowingError_m_1sigma: float = 5.0
+
+    # Traverse direction (roughly horizontal at location)
+    cameraPosNWU = st.PlanetUtils.NorthWestUpFromLocation(cameraPosPlanetFixed, radiusEquatorial)
+    cameraPosFLU = st.PlanetUtils.ForwardLeftUpFromAzimuth(cameraPosPlanetFixed, 
+                                                           rng.uniform(0.0, 2.0 * np.pi), 
+                                                           radiusEquatorial)
+    traverseDirection: npt.NDArray = cameraPosFLU.forward()
+
+    ################################
+    ####    EXECUTE TRAVERSE    ####
+    ################################
+
+    positions = []
+    pos_i = copy.deepcopy(cameraPosPlanetFixed)
+    for i in range(numImages):
+        positions.append(copy.deepcopy(pos_i))
+        if i >= calibrationCutoff:
+            pos_i += traverseDirection * traverseStep_m + rng.normal(0.0, traverseFollowingError_m_1sigma, size=3)
+            pos_i = SnapToSurface(pos_i, planet, dem)
+    
     #############################
-    ####    Render Images    ####
+    ####    RENDER IMAGES    ####
     #############################
 
     if not os.path.exists(globalConfig.renderDir) or is_dir_empty(globalConfig.renderDir):
         for i in range(numImages):
             doPrint: bool = i % printInterval == 0
 
-            # Step time forward by 1 second
-            etNow += dt
+            # Step time forward by the correct dt
+            if i < calibrationCutoff:
+                etNow += calibrationTimeStep_s
+            else:
+                etNow += traverseTimeStep_s
+
+            positionNow = positions[i]
             planetRot = spice.pxform("J2000", planet.planetFrame, etNow)
-            cameraPosPlanetCentered = (planetRot.T @ np.array([cameraPosPlanetFixed]).T).T[0]
+            positionNowPlanetCentered = (planetRot.T @ np.array([positionNow]).T).T[0]
             
-            phi_pc, _, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
-            g = sampler.SampleAcceleration_Custom(phi_pc, lon_pc, np.linalg.norm(cameraPosPlanetFixed), maxDegree, 
+            phi_pc, _, _ = r_to_latlonalt(positionNow, radiusEquatorial)
+            g = sampler.SampleAcceleration_Custom(phi_pc, lon_pc, np.linalg.norm(positionNow), maxDegree, 
                                                   overrideSphericalHarmonics=False, noRadialTerm=False, 
                                                   includeThirdBody=True, et=etNow)
-            g -= np.cross(Omega, np.cross(Omega, cameraPosPlanetFixed))  # Handle being on the surface of the planet
+            g -= np.cross(Omega, np.cross(Omega, positionNow))  # Handle being on the surface of the planet
             g_true = copy.deepcopy(g)
             
-            lat_pc, lon_pc, h_pc = r_to_latlonalt(cameraPosPlanetFixed, planet.radius)
+            lat_pc, lon_pc, h_pc = r_to_latlonalt(positionNow, planet.radius)
             T_P_G = latlon_to_T(lat_pc, lon_pc).T
             g_IMU_frame = (T_P_G @ np.array([g]).T).T[0]
 
@@ -265,10 +366,10 @@ if __name__ == "__main__":
             ra, de = r_hat_to_ra_dec(-normalize(gInertial))
             
             planetPos, _ = spice.spkpos(planet.planetName, etNow, "J2000", "NONE", "SSB")
-            cameraPos = planetPos + 0.001 * cameraPosPlanetCentered  # needs to be in km
+            cameraPos = planetPos + 0.001 * positionNowPlanetCentered  # needs to be in km
             
             # Camera pointing vector
-            ra, de = r_hat_to_ra_dec(normalize(cameraPosPlanetCentered))
+            ra, de = r_hat_to_ra_dec(normalize(positionNowPlanetCentered))
 
             # Render
             idx += 1
@@ -298,19 +399,16 @@ if __name__ == "__main__":
         print("Render directory not empty; skipping render step...\n")
     
     #########################################
-    ####    Obtain Attitude Estimates    ####
+    ####    OBTAIN ATTITUDE ESTIMATES    ####
     #########################################
-
-    if regenerate_catalog:
-        etOriginal
 
     if reprocess_star_tracker:
         Path(attitudeEstDataPath).unlink(missing_ok=True)
 
     if not Path(attitudeEstDataPath).is_file():
-        ################################
-        #USER INPUT
-        ################################
+        ##########################
+        ####    User Input    ####
+        ##########################
         
         nmatch = 8 # minimum number of stars to match
         starMatchPixelTol = 1 # pixel match tolerance
@@ -333,17 +431,17 @@ if __name__ == "__main__":
         image_extension = ".png" # the image extension to search for in the data_path directory
         cat_prefix ='' # if the catalog has a prefix, define it here
 
-        ################################
-        #SUPPORT FUNCTIONS
-        ################################
+        #################################
+        ####    Support Functions    ####
+        #################################
 
         print(f'imgSourceDir = {imgSourceDir}')
 
-        ################################
-        #MAIN CODE
-        ################################
+        ###################################
+        ####    Process Star Images    ####
+        ###################################
 
-        #load star tracker stuff
+        # Load star tracker and catalog data
         if darkframe_file_path == '': darkframe_file_path = None
         if darkframe_file_path is not None:
             if not os.path.exists(darkframe_file_path):
@@ -363,7 +461,7 @@ if __name__ == "__main__":
         dx = camera_matrix[0, 0]
         isa_thresh = starMatchPixelTol*(1/dx)
 
-        #define structures for data capture
+        # Define structures for data capture
         image_name = []
         ttime = []
         stemp = []
@@ -375,7 +473,7 @@ if __name__ == "__main__":
         qv1 = []
         qv2 = []
 
-        # create list of all images in target dir
+        # Create list of all images in target dir
         total_start = time.time()
 
         dir_contents = os.listdir(imgSourceDir)
@@ -388,7 +486,6 @@ if __name__ == "__main__":
         for item in dir_contents:
             if image_extension in item:
                 image_names+=[os.path.abspath(item)]
-                # image_names += [item]
 
         idx: int = 0
         for image_filename in image_names:
@@ -483,15 +580,12 @@ if __name__ == "__main__":
         g_est_list.append(gravEst_j)
 
     ###############################
-    ####    SPS Calibration    ####
+    ####    SPS CALIBRATION    ####
     ###############################
 
-    midpoint: int = 500
-    endpoint: int = 2000
-
-    doCpp: bool = True
+    eps: float = 1.0e-4
     T_calibration = np.identity(3)
-    if doCpp:
+    if doCpp and doCalibration:
         phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
 
         def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, time_j: float, phi_pc: float, lon_pc: float,
@@ -503,16 +597,15 @@ if __name__ == "__main__":
             return g_truth
 
         SampleTrueGravity_Wrapped = lambda pos, time_j : SampleTrueGravity(pos, time_j, phi_pc, lon_pc, maxDegree, Omega)
-        T_calibration = st.ProcPlanet.SPS.Calibrate(midpoint, cameraPosPlanetFixed, T_i_c_list, 
-                                                    T_i_b_list, g_est_list, times, SampleTrueGravity_Wrapped)
-    else:
+        T_calibration = st.ProcPlanet.SPS.Calibrate(calibrationCutoff, cameraPosPlanetFixed, T_i_c_list, T_i_b_list, 
+                                                    g_est_list, times, SampleTrueGravity_Wrapped, eps)
+    elif doCalibration:
         s_0: npt.NDArray = np.zeros(3)
         Pss_0: npt.NDArray = np.zeros((3, 3))
 
         print(f"Initial guess: {ModifiedRodriguesParameters.FromVector(s_0).ToMatrix()}\n")
 
         ds: npt.NDArray = np.zeros(3)
-        eps: float = 1.0e-4
         iteration: int = 0
         hasPriorEstimate: bool = False
 
@@ -534,7 +627,7 @@ if __name__ == "__main__":
             
             # print(f"g_truth = {g_truth}")
 
-            for j in range(len(times[:midpoint])):
+            for j in range(len(times[:calibrationCutoff])):
                 phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
                 g_truth = sampler.SampleAcceleration_Custom(phi_pc, lon_pc, np.linalg.norm(cameraPosPlanetFixed), maxDegree, 
                                                             overrideSphericalHarmonics=False, noRadialTerm=False, 
@@ -594,7 +687,7 @@ if __name__ == "__main__":
     # exit(0)
 
     #################################
-    ####    SPS Kalman Filter    ####
+    ####    SPS KALMAN FILTER    ####
     #################################
     
     # Position error logging
@@ -603,7 +696,6 @@ if __name__ == "__main__":
     # distanceErrors_km: list[float] = []
 
     # Tolerances and scale factors
-    limit_km: float = 20.0
     tol: float = 10.0  # m
     scaleFactor = 1000.0 if planet.demUnits == "km" else 1.0
     gradientWalkFactor: float = 1.0
@@ -636,17 +728,21 @@ if __name__ == "__main__":
     gamma_underweight = 0.3
     # T_g_c = np.identity(3)  # transformation from gravity to camera frame
     T_g_c = T_calibration.T  # transformation from gravity to camera frame
-    for j in range(len(times[midpoint:endpoint])):
+
+    estimatedPositions: list[npt.NDArray] = []
+
+    for j in range(len(times[calibrationCutoff:endpoint])):
+
         ######################################
         ####    Measurement Processing    ####
         ######################################
         
         doPrint: bool = j % printInterval == 0
 
-        T_i_b: npt.NDArray = T_i_b_list[j + midpoint]
-        truth_j = truthData[j + midpoint]
-        attitudeEst_j = attitudeEstData[j + midpoint]
-        gravEst_j = gravEstData[j + midpoint]
+        T_i_b: npt.NDArray = T_i_b_list[j + calibrationCutoff]
+        truth_j = truthData[j + calibrationCutoff]
+        attitudeEst_j = attitudeEstData[j + calibrationCutoff]
+        gravEst_j = gravEstData[j + calibrationCutoff]
         
         if attitudeEst_j[0] == 999 or attitudeEst_j[1] == 999 or attitudeEst_j[2] == 999 or attitudeEst_j[3] == 999:
             print(f'Warning: skipped measurement at index {j} (invalid quaternion).')
@@ -659,36 +755,27 @@ if __name__ == "__main__":
         g_sensorFrame = np.array([gravEst_j[0], gravEst_j[1], gravEst_j[2]])
 
         # Coarse estimates
-        r_coarse_1 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + midpoint], planet, 
+        r_coarse_1 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + calibrationCutoff], planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega)
-        r_coarse_2 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + midpoint], planet, 
+        r_coarse_2 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + calibrationCutoff], planet, 
                                                  gravModel, sampler, dem, scaleFactor, Omega, r_coarse_1)
-        # r_coarse_3 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + midpoint], planet, 
-        #                                          gravModel, sampler, dem, scaleFactor, Omega, r_coarse_2)
-        # r_coarse_4 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + midpoint], planet, 
-        #                                          gravModel, sampler, dem, scaleFactor, Omega, r_coarse_3)
-        # r_coarse_5 = CoarseEstimate_SurfaceFixed(T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + midpoint], planet, 
-        #                                          gravModel, sampler, dem, scaleFactor, Omega, r_coarse_4)
         
         if doPrint:
             print(f'Sample point {j}:')
-            # r_expected = planetographic_to_cartesian(latTruth, lonTruth, altTruth, 
-            #                                          planet.radius, gravModel.polarRadius)
-            print(f'r_expected = {cameraPosPlanetFixed}')
+            print(f'r_expected = {positions[j]}')
             print(f'r_coarse_1 = {r_coarse_1}')
             print(f'r_coarse_2 = {r_coarse_2}')
-            # print(f'r_coarse_3 = {r_coarse_3}')
-            # print(f'r_coarse_4 = {r_coarse_4}')
-            # print(f'r_coarse_5 = {r_coarse_5}')
         
-        fineOutputs = FineEstimate(r_coarse_2, T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + midpoint], planet, gravModel, sampler, 
-                                   dem, scaleFactor, Omega, maxDegree, gradientWalkFactor, tol, doPrint, j + midpoint)
+        fineOutputs = FineEstimate(r_coarse_2, T_i_b, T_i_c, T_g_c, g_sensorFrame, times[j + calibrationCutoff], planet, gravModel, sampler, 
+                                   dem, scaleFactor, Omega, maxDegree, gradientWalkFactor, tol, doPrint, j + calibrationCutoff)
 
         r_bestEstimate = fineOutputs.pos
         phi_pg = fineOutputs.phi_pg
         lon = fineOutputs.lon
         alt = fineOutputs.alt
         i = fineOutputs.iterations
+
+        estimatedPositions.append(r_bestEstimate)
         
         if doPrint:
             print(f'r_bestEstimate = {r_bestEstimate}')
@@ -701,7 +788,10 @@ if __name__ == "__main__":
         ####    Filter Propagation    ####
         ##################################
 
-        mx_minus = copy.deepcopy(mx_plus)
+        # TODO: pretty sure we can't just add error here because that breaks the Kalman Filter?
+        # mx_minus = mx_plus + traverseDirection * traverseStep_m + rng.normal(0.0, traverseFollowingError_m_1sigma, size=3)
+        mx_minus = mx_plus + traverseDirection * traverseStep_m
+        mx_minus = SnapToSurface(mx_minus, planet, dem)
         Pxx_minus = Pxx_plus + Pww
         
         #############################
@@ -732,7 +822,7 @@ if __name__ == "__main__":
         ####    Clean-up and Printing    ####
         #####################################
 
-        percentComplete = round(100.0 * float(j) / float(len(times[midpoint:endpoint])), 3)
+        percentComplete = round(100.0 * float(j) / float(len(times[calibrationCutoff:endpoint])), 3)
         
         endTime = time.perf_counter()
         elapsedSeconds = endTime - startTime
@@ -743,55 +833,88 @@ if __name__ == "__main__":
             print("------------------------------------------------------------------------------------------------------\n")
     
     ########################
-    ####    Plotting    ####
+    ####    PLOTTING    ####
     ########################
+
+    cameraTraversePositions: list[npt.NDArray] = positions[calibrationCutoff:endpoint]
     
     fig1 = plt.figure(layout='constrained')
     ax1 = fig1.add_subplot(131)
     ax2 = fig1.add_subplot(132)
     ax3 = fig1.add_subplot(133)
 
-    z_x = [z[0] for z in z_history]
-    z_y = [z[1] for z in z_history]
-    z_z = [z[2] for z in z_history]
+    z_x = np.array([z[0] for z in z_history])
+    z_y = np.array([z[1] for z in z_history])
+    z_z = np.array([z[2] for z in z_history])
 
-    mx_x = [mx[0] for mx in mx_history]
-    mx_y = [mx[1] for mx in mx_history]
-    mx_z = [mx[2] for mx in mx_history]
+    mx_x = np.array([mx[0] for mx in mx_history])
+    mx_y = np.array([mx[1] for mx in mx_history])
+    mx_z = np.array([mx[2] for mx in mx_history])
 
-    Pxx_x = [Pxx[0, 0] for Pxx in Pxx_history]
-    Pxx_y = [Pxx[1, 1] for Pxx in Pxx_history]
-    Pxx_z = [Pxx[2, 2] for Pxx in Pxx_history]
+    Pxx_x = np.array([Pxx[0, 0] for Pxx in Pxx_history])
+    Pxx_y = np.array([Pxx[1, 1] for Pxx in Pxx_history])
+    Pxx_z = np.array([Pxx[2, 2] for Pxx in Pxx_history])
+
+    camPos_x = np.array([camPos[0] for camPos in cameraTraversePositions])
+    camPos_y = np.array([camPos[1] for camPos in cameraTraversePositions])
+    camPos_z = np.array([camPos[2] for camPos in cameraTraversePositions])
 
     subsample: int = 1
-    ax1.scatter(times[midpoint:endpoint][::subsample] - etOriginal, z_x[::subsample] - cameraPosPlanetFixed[0], label=r'$z(0)$', color='purple')
-    ax1.plot(times[midpoint:endpoint] - etOriginal, mx_x - cameraPosPlanetFixed[0], label=r"$m_{x}(0)$", color='blue')
-    ax1.plot(times[midpoint:endpoint] - etOriginal, -3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r', label=r"$P_{xx}(0,0)$")
-    ax1.plot(times[midpoint:endpoint] - etOriginal, 3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r')
+    ax1.scatter(times[calibrationCutoff:endpoint][::subsample] - etOriginal, z_x[::subsample] - camPos_x[::subsample], label=r'$z(0)$', color='purple')
+    ax1.plot(times[calibrationCutoff:endpoint] - etOriginal, mx_x - camPos_x, label=r"$m_{x}(0)$", color='blue')
+    ax1.plot(times[calibrationCutoff:endpoint] - etOriginal, -3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r', label=r"$P_{xx}(0,0)$")
+    ax1.plot(times[calibrationCutoff:endpoint] - etOriginal, 3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r')
     ax1.set_xlabel("Time (s)")
     ax1.set_ylabel("Position error (m)")
     ax1.set_title(r"Error in $m_{x}(0)$ over Time")
     ax1.grid()
     ax1.legend()
 
-    ax2.scatter(times[midpoint:endpoint][::subsample] - etOriginal, z_y[::subsample] - cameraPosPlanetFixed[1], label=r'$z(1)$', color='purple')
-    ax2.plot(times[midpoint:endpoint] - etOriginal, mx_y - cameraPosPlanetFixed[1], label=r"$m_{x}(1)$", color='blue')
-    ax2.plot(times[midpoint:endpoint] - etOriginal, -3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r', label=r"$P_{xx}(1,1)$")
-    ax2.plot(times[midpoint:endpoint] - etOriginal, 3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r')
+    ax2.scatter(times[calibrationCutoff:endpoint][::subsample] - etOriginal, z_y[::subsample] - camPos_y[::subsample], label=r'$z(1)$', color='purple')
+    ax2.plot(times[calibrationCutoff:endpoint] - etOriginal, mx_y - camPos_y, label=r"$m_{x}(1)$", color='blue')
+    ax2.plot(times[calibrationCutoff:endpoint] - etOriginal, -3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r', label=r"$P_{xx}(1,1)$")
+    ax2.plot(times[calibrationCutoff:endpoint] - etOriginal, 3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r')
     ax2.set_xlabel("Time (s)")
     ax2.set_ylabel("Position error (m)")
     ax2.set_title(r"Error in $m_{x}(1)$ over Time")
     ax2.grid()
     ax2.legend()
     
-    ax3.scatter(times[midpoint:endpoint][::subsample] - etOriginal, z_z[::subsample] - cameraPosPlanetFixed[2], label=r'$z(2)$', color='purple')
-    ax3.plot(times[midpoint:endpoint] - etOriginal, mx_z - cameraPosPlanetFixed[2], label=r"$m_{x}(2)$", color='blue')
-    ax3.plot(times[midpoint:endpoint] - etOriginal, -3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r', label=r"$P_{xx}(2,2)$")
-    ax3.plot(times[midpoint:endpoint] - etOriginal, 3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r')
+    ax3.scatter(times[calibrationCutoff:endpoint][::subsample] - etOriginal, z_z[::subsample] - camPos_z[::subsample], label=r'$z(2)$', color='purple')
+    ax3.plot(times[calibrationCutoff:endpoint] - etOriginal, mx_z - camPos_z, label=r"$m_{x}(2)$", color='blue')
+    ax3.plot(times[calibrationCutoff:endpoint] - etOriginal, -3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r', label=r"$P_{xx}(2,2)$")
+    ax3.plot(times[calibrationCutoff:endpoint] - etOriginal, 3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r')
     ax3.set_xlabel("Time (s)")
     ax3.set_ylabel("Position error (m)")
     ax3.set_title(r"Error in $m_{x}(2)$ over Time")
     ax3.grid()
     ax3.legend()
+
+    local_x = -cameraPosNWU.west()
+    local_y = cameraPosNWU.north()
+
+    trueTraverse_x = [np.dot(camPos - cameraPosPlanetFixed, local_x) for camPos in cameraTraversePositions]
+    trueTraverse_y = [np.dot(camPos - cameraPosPlanetFixed, local_y) for camPos in cameraTraversePositions]
+
+    estTraverse_x = [np.dot(mx - cameraPosPlanetFixed, local_x) for mx in mx_history]
+    estTraverse_y = [np.dot(mx - cameraPosPlanetFixed, local_y) for mx in mx_history]
+
+    positionEstimates_x = [np.dot(estPos - cameraPosPlanetFixed, local_x) for estPos in estimatedPositions]
+    positionEstimates_y = [np.dot(estPos - cameraPosPlanetFixed, local_y) for estPos in estimatedPositions]
+
+    fig2 = plt.figure(layout='constrained')
+    ax4 = fig2.add_subplot(111)
+
+    ax4.plot(trueTraverse_x, trueTraverse_y, color='green', label='True Traverse')
+    ax4.plot(estTraverse_x, estTraverse_y, color='blue', label='Estimated Traverse')
+    ax4.scatter(positionEstimates_x, positionEstimates_y, color='purple', marker='x', label='Position Estimates')
+    ax4.scatter(0.0, 0.0, color='red', marker='*', s=100, label=f'Origin ({phi_pg_0}°N, {lon_pg_0}°E)', zorder=2)
+
+    ax4.set_xlabel('East Position (m)')
+    ax4.set_ylabel('North Position (m)')
+    ax4.axis('scaled')
+    ax4.set_box_aspect(1)
+    ax4.grid()
+    ax4.legend()
 
     plt.show()

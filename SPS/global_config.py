@@ -18,7 +18,7 @@ class GlobalConfig:
         self.tNow = tNow
 
         self.nameTitle = self.planet.planetName.title()
-        self.outputDir = planet.rootDir + "output/" + self.nameTitle + "/"
+        self.outputDir = planet.rootDir + "/output/" + self.nameTitle + "/"
         self.renderDir = self.outputDir + "Renders/"
 
         os.makedirs(self.outputDir, exist_ok=True)

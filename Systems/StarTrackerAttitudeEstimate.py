@@ -84,7 +84,7 @@ np.set_printoptions(suppress=True)
 home = os.path.join(st.path_utils.GetLocalAssetsDir(), "Repos", "SPS-Star-Tracker")
 imgSourceDir = os.path.join(home, "output", "SPSGuessr")
 
-st.logger_info(f"imgSourceDir = {imgSourceDir}")
+# st.logger_info(f"imgSourceDir = {imgSourceDir}")
 
 data_path = os.path.join(home, 'data')  # full path to your data
 cam_config_file_path = os.path.join(home, 'data', 'cam_config', 'Custom_cam.json')  # full path (including filename) of your cam config file
@@ -220,7 +220,8 @@ def ProcessSPSImages(paramMap: st.ParamMap, timestamp: st.timestamp):
         gy += [gravity[1]]
         gz += [gravity[2]]
 
-        st.logger_info(f'Completed image {idx} ({round(float(idx) / float(len(image_names)) * 100.0, 2)} %)')
+        st.OnScreenLogMessage(f"Completed image {idx} ({round(float(idx) / float(len(image_names)) * 100.0, 2)} %)",
+                              "StarTrackerAttitudeEstimate", st.Severity.Info)
         idx += 1
 
     data = {
@@ -248,15 +249,16 @@ def ProcessSPSImages(paramMap: st.ParamMap, timestamp: st.timestamp):
     # keys=sorted(data.keys())  # Why are we sorting??
     keys=data.keys()
 
-    filename = os.path.join(home, "output/SPSCameraAttitudes.csv")
+    filename = os.path.join(home, "output", "SPSCameraAttitudes.csv")
 
     with open(filename,'w', newline='') as csv_file:
         writer=csv.writer(csv_file)
         writer.writerow(keys)
         writer.writerows(zip(*[data[key] for key in keys]))
 
-    st.logger_info("\n Took " + str(time.time() - total_start) + " seconds to complete \n")
-    st.logger_info("Data saved to: " + filename + "\n")
+    st.OnScreenLogMessage("\n Took " + str(time.time() - total_start) + " seconds to complete \n", 
+                          "StarTrackerAttitudeEstimate", st.Severity.Info)
+    st.OnScreenLogMessage("Data saved to: " + filename + "\n", "StarTrackerAttitudeEstimate", st.Severity.Info)
 
 
 def ProcessSPSTryCatch(paramMap: st.ParamMap, timestamp: st.timestamp):
@@ -264,8 +266,8 @@ def ProcessSPSTryCatch(paramMap: st.ParamMap, timestamp: st.timestamp):
     try:
         ProcessSPSImages(paramMap, timestamp)
     except Exception as e:
-        st.logger_fatal(traceback.format_exc())
-        # st.logger_fatal(str(e))
+        # st.logger_fatal(traceback.format_exc())
+        st.logger_fatal(str(e))
 
 
 st.SimGlobals.Subscribe("ProcessSPSImages", ProcessSPSTryCatch)
