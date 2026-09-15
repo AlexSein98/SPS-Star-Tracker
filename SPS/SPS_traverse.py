@@ -145,10 +145,10 @@ if __name__ == "__main__":
     doCpp: bool                     = True
     doCalibration: bool             = True
     
-    calibrationCutoff: int = 300
-    endpoint: int = calibrationCutoff + 200
+    calibrationCutoff: int = 30
+    endpoint: int = calibrationCutoff + 20
 
-    numImages: int = calibrationCutoff + 200
+    numImages: int = calibrationCutoff + 20
     
     ##############################
     ####    SITE SELECTION    ####
@@ -157,8 +157,8 @@ if __name__ == "__main__":
     # site: str = "Ideal"
     # site: str = "Apollo15"
     # site: str = "Apollo17"
-    site: str = "ConnectingRidge"
-    # site: str = "NobileRim1"
+    # site: str = "ConnectingRidge"
+    site: str = "NobileRim1"
 
     hash_object = hashlib.sha256(site.encode('utf-8'))
     int_seed = int(hash_object.hexdigest(), 16)
@@ -207,11 +207,15 @@ if __name__ == "__main__":
 
     truthDataPath = globalConfig.outputDir + "truth_data_" + planet.planetName.title() + ".csv"
     attitudeEstDataPath = globalConfig.outputDir + "attitudes_" + globalConfig.nameTitle + ".csv"
+    gravTruthDataPath = globalConfig.outputDir + "true_gravities_" + globalConfig.nameTitle + ".csv"
     gravEstDataPath = globalConfig.outputDir + "measurements_" + planet.planetName.title() + ".csv"
 
     #############################
     ####    ERROR SOURCES    ####
     #############################
+    
+    # Random number generator
+    rng = np.random.default_rng(int_seed + 100)
 
     addMeasurementBias: bool = globalConfig.addMeasurementBias
     addMeasurementNoise: bool = globalConfig.addMeasurementNoise
@@ -222,7 +226,7 @@ if __name__ == "__main__":
     biasSigma_2 = np.array([[0.15 ** 2, 0.0, 0.0],
                             [0.0, 0.15 ** 2, 0.0],
                             [0.0, 0.0, 0.15 ** 2]])
-    bias = np.linalg.cholesky(biasSigma_2) @ np.random.randn(3)
+    bias = np.linalg.cholesky(biasSigma_2) @ rng.normal(0.0, 1.0, size=3)
 
     ############################
     ####    RENDER SETUP    ####
@@ -254,6 +258,7 @@ if __name__ == "__main__":
     
     idx = 0
     true_data = []
+    true_accelerations: list[npt.NDArray] = []
     measured_accelerations = []
     times_calibration = etOriginal + calibrationTimeStep_s * np.linspace(0.0, calibrationCutoff - 1, calibrationCutoff)
     times_traverse = times_calibration[-1] + traverseTimeStep_s + traverseTimeStep_s * np.linspace(
@@ -287,9 +292,6 @@ if __name__ == "__main__":
     ###################################
     ####    TRAVERSE PARAMETERS    ####
     ###################################
-    
-    # Random number generator
-    rng = np.random.default_rng(int_seed)
 
     # Assume crew takes SPS measurements every X meters. To find X, assume 0.5 m/s walking 
     # speed based on Apollo estimates, science objectives slowing down the crew, etc.
@@ -335,7 +337,7 @@ if __name__ == "__main__":
             else:
                 etNow += traverseTimeStep_s
 
-            positionNow = positions[i]
+            positionNow = copy.deepcopy(positions[i])
             planetRot = spice.pxform("J2000", planet.planetFrame, etNow)
             positionNowPlanetCentered = (planetRot.T @ np.array([positionNow]).T).T[0]
             
@@ -354,12 +356,13 @@ if __name__ == "__main__":
                 g_IMU_frame += bias
 
             if addMeasurementNoise:
-                g_IMU_frame += np.linalg.cholesky(sigma_2) @ np.random.randn(3)
+                g_IMU_frame += np.linalg.cholesky(sigma_2) @ rng.normal(0.0, 1.0, size=3)
             
             measured_accelerations.append(g_IMU_frame)
             # measured_accelerations.append(np.array([-np.linalg.norm(g_IMU_frame), 0.0, 0.0]))
 
             gInertial_true = (planetRot.T @ np.array([g_true]).T).T[0]
+            true_accelerations.append(g_true)
             gInertial = (planetRot.T @ T_P_G.T @ np.array([g_IMU_frame]).T).T[0]
 
             ra_true, de_true = r_hat_to_ra_dec(-normalize(gInertial_true))
@@ -393,6 +396,7 @@ if __name__ == "__main__":
                 print(f'Elapsed time: {elapsedTime}. Remaining time estimate: {projectedRemainingTime}\n')
             
         write_csv(truthDataPath, true_data)
+        write_csv(gravTruthDataPath, true_accelerations)
         write_csv(gravEstDataPath, measured_accelerations)
 
     else:
@@ -548,12 +552,14 @@ if __name__ == "__main__":
 
         print("\n\n took " + str(time.time()-total_start) + " seconds to complete \n\n")
         print("data saved to: " + attitudeEstDataPath)
+
     else:
         print("Quaternion measurements already processed; skipping processing step...\n")
 
     # Get data from files
     truthData = read_csv(truthDataPath)
     attitudeEstData = read_csv(attitudeEstDataPath, ignore=[0, 1, 2, 3], hasHeader=True)
+    gravTruthData = read_csv(gravTruthDataPath)
     gravEstData = read_csv(gravEstDataPath)
 
     # Very basic error handling if datasets are not the same length
@@ -567,6 +573,11 @@ if __name__ == "__main__":
     g_est_list: list[npt.NDArray] = []
     for i in range(len(times)):
         _T_i_b = spice.pxform("J2000", planet.planetFrame, times[i])
+        # _S_i_b = spice.sxform("J2000", planet.planetFrame, times[i])
+        # maybe_T_i_b, _ = spice.xf2rav(_S_i_b)
+        # _T_i_b = np.array([[maybe_T_i_b[0][0], maybe_T_i_b[0][1], maybe_T_i_b[0][2]],
+        #                    [maybe_T_i_b[1][0], maybe_T_i_b[1][1], maybe_T_i_b[1][2]],
+        #                    [maybe_T_i_b[2][0], maybe_T_i_b[2][1], maybe_T_i_b[2][2]]])
         T_i_b_list.append(_T_i_b)
 
         attitudeEst_j = attitudeEstData[i]
@@ -588,17 +599,21 @@ if __name__ == "__main__":
     if doCpp and doCalibration:
         phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
 
-        def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, time_j: float, phi_pc: float, lon_pc: float,
+        def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, j: int, times: list[float], phi_pc: float, lon_pc: float,
                             maxDegree: int, Omega: npt.NDArray) -> npt.NDArray:
             g_truth = sampler.SampleAcceleration_Custom(phi_pc, lon_pc, np.linalg.norm(pos_SPS_PCPF), maxDegree, 
                                                         overrideSphericalHarmonics=False, noRadialTerm=False, 
-                                                        includeThirdBody=True, et=time_j)
+                                                        includeThirdBody=True, et=times[j])
             g_truth -= np.cross(Omega, np.cross(Omega, pos_SPS_PCPF))  # Handle being on the surface of the planet
             return g_truth
+        SampleTrueGravity_Wrapped = lambda pos, j : SampleTrueGravity(pos, j, times, phi_pc, lon_pc, maxDegree, Omega)
 
-        SampleTrueGravity_Wrapped = lambda pos, time_j : SampleTrueGravity(pos, time_j, phi_pc, lon_pc, maxDegree, Omega)
-        T_calibration = st.ProcPlanet.SPS.Calibrate(calibrationCutoff, cameraPosPlanetFixed, T_i_c_list, T_i_b_list, 
-                                                    g_est_list, times, SampleTrueGravity_Wrapped, eps)
+        # def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, j: int, _gravTruthData: list[npt.NDArray]) -> npt.NDArray:
+        #     return _gravTruthData[j]
+        # SampleTrueGravity_Wrapped = lambda pos, j : SampleTrueGravity(pos, j, gravTruthData)
+
+        T_calibration = st.ProcPlanet.SPS.CalculateAlignment(calibrationCutoff, cameraPosPlanetFixed, T_i_c_list, T_i_b_list, 
+                                                    g_est_list, SampleTrueGravity_Wrapped, eps)
     elif doCalibration:
         s_0: npt.NDArray = np.zeros(3)
         Pss_0: npt.NDArray = np.zeros((3, 3))
