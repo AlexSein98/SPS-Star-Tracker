@@ -170,15 +170,15 @@ np.set_printoptions(suppress=True)
 #################################
 
 regenerateStarCatalog: bool     = False
-delete_old: bool                = False
-reprocess_star_tracker: bool    = False
-doCalibration: bool             = True
+delete_old: bool                = True
+reprocess_star_tracker: bool    = True
+doCalibration: bool             = False
 globalDoPrint: bool             = True
 
-calibrationCutoff: int = 500
-endpoint: int = calibrationCutoff + 200
+calibrationCutoff: int = 5
+endpoint: int = calibrationCutoff + 2
 
-numImages: int = calibrationCutoff + 200
+numImages: int = calibrationCutoff + 2
 
 ##############################
 ####    SITE SELECTION    ####
@@ -187,8 +187,9 @@ numImages: int = calibrationCutoff + 200
 # site: str = "Ideal"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
-site: str = "ConnectingRidge"
+# site: str = "ConnectingRidge"
 # site: str = "NobileRim1"
+site: str = "DummyTestSite"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
 int_seed = int(hash_object.hexdigest(), 16)
@@ -227,6 +228,12 @@ elif site == "NobileRim1":
     lon_pg_0 = 35.3
     h_ellp_0 = 1743.0
 
+elif site == "DummyTestSite":
+    # Something with low gravity variation (ideal)
+    phi_pg_0 = 4.0
+    lon_pg_0 = -29.4
+    h_ellp_0 = 0.0
+
 #################################
 ####    PLANET PARAMETERS    ####
 #################################
@@ -236,6 +243,8 @@ J2000Frame = J2000.GetBodyFixedFrame()
 planetEntity: st.Entity = st.GetThisSystem().GetParam(st.VarType.entityRef, "Planet")
 planetFixedFrame = planetEntity.GetBodyFixedFrame()
 planetName: str = planetEntity.getName()
+
+cameraEntity: st.Entity = st.GetThisSystem().GetParam(st.VarType.entityRef, "Camera")
 
 renderDirLocal = os.path.join("Local", "Repos", "SPS-Star-Tracker", "output", planetName, site, "Renders")
 outputDir = os.path.join(thisRepo, "output", planetName, site)
@@ -455,13 +464,16 @@ if is_dir_empty(renderDir):
         st.OnScreenLogMessage(f'ra           = {ra}, de           = {de}', "SPSTraverse", st.Severity.Info)
         st.OnScreenLogMessage(f'ra_pcpf      = {ra_pcpf}, de_pcpf      = {de_pcpf}', "SPSTraverse", st.Severity.Info)
         st.OnScreenLogMessage(f'ra_meas_pcpf = {ra_meas_pcpf}, de_meas_pcpf = {de_meas_pcpf}', "SPSTraverse", st.Severity.Info)
-        
-        rotMat_inertial = ra_dec_to_rot(ra_true_i, de_true_i)
-        rotQuat_inertial = st.math.DCM_to_Quat(rotMat_inertial)
 
-        rotMat_pcpf = ra_dec_to_rot(ra_pcpf, de_pcpf)
-        rotQuat_pcpf = st.math.DCM_to_Quat(rotMat_pcpf)
-        q_c_b_true = st.math.DCM_to_Quat(rotMat_pcpf.T)
+        # Passive transform from inertial frame to surface (grav vector) frame (x axis along -grav)
+        # We get this by converting a pointing vec in inertial frame to ra/dec, then converting
+        # ra/dec to rotation matrix (Euler 321 with negative dec, 0 roll), then transposing.
+        T_I_S_true = ra_dec_to_rot(ra_true_i, de_true_i).T
+        q_I_S_true_passive = st.math.DCM_to_Quat(T_I_S_true)
+
+        T_PCPF_S_true = ra_dec_to_rot(ra_pcpf, de_pcpf).T
+        q_PCPF_S_true_passive = st.math.DCM_to_Quat(T_PCPF_S_true)
+        # q_c_b_true = st.math.DCM_to_Quat(rotMat_pcpf.T)
         # st.OnScreenLogMessage(f"Latitude = {de_pcpf}, Longitude = {ra_pcpf}", "SPSTraverse", st.Severity.Info)
 
         # Render (old version)
@@ -470,13 +482,15 @@ if is_dir_empty(renderDir):
         # rot_framed = st.frames.FramedRot(rotMat_pcpf, planetFixedFrame)
 
         # rotQuatInertial = rot_framed.Quat_WRT(J2000Frame)
-        st.OnScreenLogMessage(f"True inertial attitude = {rotQuat_inertial}", "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f"True q_c_b             = {q_c_b_true}", "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f"True inertial attitude = {q_I_S_true_passive}", "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f"True q_c_b             = {q_PCPF_S_true_passive}", "SPSTraverse", st.Severity.Info)
+
+        cameraEntity.setRotation(st.frames.FramedRot(T_I_S_true, J2000Frame))
 
         EridaniRenderPayload = st.ParamMap()
         EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Loc", pos_framed.WRT_ExprIn(J2000Frame))
         EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Vel", vel_framed.vel_WRT_ExprIn(J2000Frame))
-        EridaniRenderPayload.AddParam(st.VarType.doubleV4, "Rot", rotQuat_inertial)
+        EridaniRenderPayload.AddParam(st.VarType.doubleV4, "Rot", q_I_S_true_passive)
         EridaniRenderPayload.AddParam(st.VarType.entityRef, "Frame", J2000)
         EridaniRenderPayload.AddParam(st.VarType.string, "NameOverride", "SPSRender" + str(i).zfill(5))
         EridaniRenderPayload.AddParam(st.VarType.string, "OutputPathOverride", str(renderDirLocal))
@@ -493,7 +507,7 @@ if is_dir_empty(renderDir):
             # st.OnScreenLogMessage(f'Recording data for image {i} of {numImages} ({round(100.0 * float(i) / numImages, 2)}%): RA = {round(ra, 3)}, Dec = {round(de, 3)}', "SPSTraverse", st.Severity.Info)
 
         # true_data.append(st.math.DCM_to_Quat(ra_dec_to_rot(ra_true_i, de_true)))
-        true_data.append(rotQuat_inertial)
+        true_data.append(q_I_S_true_passive)
 
         endTime = time.perf_counter()
         elapsedSeconds = endTime - startTime
@@ -632,9 +646,9 @@ if not Path(attitudeEstDataPath).is_file():
             q_rotate = np.array([0.5, -0.5, 0.5, 0.5])  # w-last quaternion
             q_est = quat_mult(q_est, q_rotate)  # w-last quaternion
             qs += [q_est[3]]
-            qv0 += [q_est[0]]
-            qv1 += [q_est[1]]
-            qv2 += [q_est[2]]
+            qv0 += [-q_est[0]]
+            qv1 += [-q_est[1]]
+            qv2 += [-q_est[2]]
         except AssertionError:
             if VERBOSE:
                 st.OnScreenLogMessage('NO VALID STARS FOUND\n', "SPSTraverse", st.Severity.Info)
