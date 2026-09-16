@@ -45,7 +45,7 @@ import csv
 import astropy.time as astrotime
 
 # from SPS.global_config import globalConfig
-from py_src.star.python.transformations import latlon_to_T, r_to_latlonalt, r_hat_to_ra_dec, normalize
+from py_src.star.python.transformations import latlon_to_T, T_to_latlon, r_to_latlonalt, r_hat_to_ra_dec, normalize
 
 
 def T1(angle: float) -> npt.NDArray:
@@ -119,6 +119,8 @@ args.cubicInterp = True
 
 planetData.AddGeoBinAltimetryLayer(1.0, moonGlobalData, args)
 
+time.sleep(5.0)
+
 
 # Wait for Eridani to load (TODO: probably don't need this because 
 # it's guaranteed to only start after "init" is done on all systems?)
@@ -171,8 +173,9 @@ regenerateStarCatalog: bool     = False
 delete_old: bool                = False
 reprocess_star_tracker: bool    = False
 doCalibration: bool             = True
+globalDoPrint: bool             = True
 
-calibrationCutoff: int = 300
+calibrationCutoff: int = 500
 endpoint: int = calibrationCutoff + 200
 
 numImages: int = calibrationCutoff + 200
@@ -184,8 +187,8 @@ numImages: int = calibrationCutoff + 200
 # site: str = "Ideal"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
-# site: str = "ConnectingRidge"
-site: str = "NobileRim1"
+site: str = "ConnectingRidge"
+# site: str = "NobileRim1"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
 int_seed = int(hash_object.hexdigest(), 16)
@@ -229,11 +232,13 @@ elif site == "NobileRim1":
 #################################
 
 J2000: st.Entity = st.SimGlobals.GetSimEntity().GetParam(st.VarType.entityRef, "J2000Frame")
+J2000Frame = J2000.GetBodyFixedFrame()
 planetEntity: st.Entity = st.GetThisSystem().GetParam(st.VarType.entityRef, "Planet")
 planetFixedFrame = planetEntity.GetBodyFixedFrame()
 planetName: str = planetEntity.getName()
 
-outputDir = os.path.join(thisRepo, "output", planetName)
+renderDirLocal = os.path.join("Local", "Repos", "SPS-Star-Tracker", "output", planetName, site, "Renders")
+outputDir = os.path.join(thisRepo, "output", planetName, site)
 renderDir = os.path.join(outputDir, "Renders")
 
 truthDataPath = os.path.join(outputDir, "truth_data_" + planetName + ".csv")
@@ -246,6 +251,9 @@ q_i_b_DataPath = os.path.join(outputDir, "q_i_b_" + planetName + ".csv")
 ####    ERROR SOURCES    ####
 #############################
 
+# Random number generator
+rng = np.random.default_rng(int_seed + 100)
+
 addMeasurementBias: bool = False
 addMeasurementNoise: bool = True
 
@@ -255,7 +263,7 @@ sigma_2 = np.array([[1e-8, 0.0, 0.0],
 biasSigma_2 = np.array([[0.15 ** 2, 0.0, 0.0],
                         [0.0, 0.15 ** 2, 0.0],
                         [0.0, 0.0, 0.15 ** 2]])
-bias = np.linalg.cholesky(biasSigma_2) @ np.random.randn(3)
+bias = np.linalg.cholesky(biasSigma_2) @ rng.normal(0.0, 1.0, size=3)
 
 ############################
 ####    RENDER SETUP    ####
@@ -269,6 +277,10 @@ if delete_old:
 
 # Time
 t0: st.timestamp = st.timestamp.from_datetime(datetime.datetime(year=2026, month=5, day=22, hour=16))
+st.SimGlobals.SimClock.ResetTo(t0)
+
+time.sleep(0.1)
+
 calibrationTimeStep_s: float = 1.0
 traverseTimeStep_s: float = 100.0
 
@@ -282,11 +294,9 @@ times_traverse = times_calibration[-1] + traverseTimeStep_s + traverseTimeStep_s
     0.0, endpoint - calibrationCutoff - 1, endpoint - calibrationCutoff)
 times = np.concat((times_calibration, times_traverse))
 
-st.OnScreenLogMessage(f"Times = {np.round(times[calibrationCutoff - 5:calibrationCutoff + 5], 1)}", "SPSTraverse", st.Severity.Info)
-
 mu: float = 1e9 * planetEntity.GetParam(st.VarType.double, ["Dynamics", "GravitationalParameter_km3_s2"])
 radiusEquatorial: float = planetEntity.GetParam(st.VarType.double, ["#Planet", "General", "Radius_m"])
-Omega = planetEntity.getAngVelocity().WRT(J2000.GetBodyFixedFrame()).ExprIn(planetFixedFrame)
+Omega = planetEntity.getAngVelocity().WRT(J2000Frame).ExprIn(planetFixedFrame)
 
 st.OnScreenLogMessage(f"Planet angular velocity (Omega) = {Omega}", "SPSTraverse", st.Severity.Info)
 # Omega = np.array([0.0, 0.0, 2.66e-6])  # Expressed in the planet-fixed frame
@@ -306,9 +316,6 @@ h_pc = llaResult.alt()
 ###################################
 ####    TRAVERSE PARAMETERS    ####
 ###################################
-
-# Random number generator
-rng = np.random.default_rng(int_seed)
 
 # Assume crew takes SPS measurements every X meters. To find X, assume 0.5 m/s walking 
 # speed based on Apollo estimates, science objectives slowing down the crew, etc.
@@ -368,7 +375,7 @@ if regenerateStarCatalog:
 
     simTimeNow: datetime.datetime = st.SimGlobals.SimClock.GetTimeNow().as_datetime()
     simTimeAstropy = astrotime.Time(simTimeNow, format='datetime')
-    planetLoc = planetEntity.getLocation().WRT_ExprIn(J2000.GetBodyFixedFrame())
+    planetLoc = planetEntity.getLocation().WRT_ExprIn(J2000Frame)
 
     ground.create_star_catalog(starcat_file=starcat_file, brightness_thresh=b_thresh,
                                excess_rows=excess_rows, index_col=index_col, fov=fov,
@@ -378,9 +385,16 @@ if regenerateStarCatalog:
 ####    RENDER IMAGES    ####
 #############################
 
-if not os.path.exists(renderDir) or is_dir_empty(renderDir):
+if not os.path.exists(renderDir):
+    Path(renderDir).mkdir(parents=True)
+
+if is_dir_empty(renderDir):
+    # locs: list[npt.NDArray] = []
+    # vels: list[npt.NDArray] = []
+    # rots: list[npt.NDArray] = []
+    # names: list[str] = []
     for i in range(numImages):
-        doPrint: bool = i % printInterval == 0
+        doPrint: bool = i % printInterval == 0 and globalDoPrint
 
         # Step time forward by the correct dt
         tNow: datetime.datetime = st.SimGlobals.SimClock.GetTimeNow().as_datetime()
@@ -399,6 +413,7 @@ if not os.path.exists(renderDir) or is_dir_empty(renderDir):
         g = st.SimGlobals.SampleVectorField("Gravity", stateNow).ExprIn(planetFixedFrame)    
         g -= np.cross(Omega, np.cross(Omega, positionNow))  # Handle being on the surface of the planet
         g_true = copy.deepcopy(g)
+        g_true_framed = st.frames.FramedVector(g_true, planetFixedFrame)
         
         lat_pc, lon_pc, h_pc = r_to_latlonalt(positionNow, radiusEquatorial)
         T_P_G = latlon_to_T(lat_pc, lon_pc).T
@@ -408,33 +423,77 @@ if not os.path.exists(renderDir) or is_dir_empty(renderDir):
             g_IMU_frame += bias
 
         if addMeasurementNoise:
-            g_IMU_frame += np.linalg.cholesky(sigma_2) @ np.random.randn(3)
+            g_IMU_frame += np.linalg.cholesky(sigma_2) @ rng.normal(0.0, 1.0, size=3)
         
         measured_accelerations.append(g_IMU_frame)
 
-        planetRot = planetEntity.getRotation().DCM_WRT(J2000.GetBodyFixedFrame())
-        q_i_b_data.append(st.math.DCM_to_Quat(planetRot))
+        planetRot = planetEntity.getRotation().DCM_WRT(J2000Frame)  # Passive, planet attitude WRT J2000
+        _q_i_b = st.math.DCM_to_Quat(planetRot)
+        q_i_b_data.append(_q_i_b)
 
-        gInertial_true = (planetRot.T @ np.array([g_true]).T).T[0]
-        true_accelerations.append(gInertial_true)
+        gInertial_true = g_true_framed.ExprIn(J2000Frame)
+        # gInertial_true = (planetRot.T @ np.array([g_true]).T).T[0]
+        true_accelerations.append(g_true)
 
-        gInertial = (planetRot.T @ T_P_G.T @ np.array([g_IMU_frame]).T).T[0]
-        ra_true, de_true = r_hat_to_ra_dec(-normalize(gInertial_true))
+        g_measured_planetFixed = (T_P_G.T @ np.array([g_IMU_frame]).T).T[0]
+        g_measured_framed = st.frames.FramedVector(g_measured_planetFixed, planetFixedFrame)
+        gInertial = g_measured_framed.ExprIn(J2000Frame)
+
+        st.OnScreenLogMessage(f'g_true                 = {g_true}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'gInertial_true         = {gInertial_true}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'g_measured_planetFixed = {g_measured_planetFixed}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'gInertial              = {gInertial}', "SPSTraverse", st.Severity.Info)
+
+        # gInertial = (planetRot.T @ T_P_G.T @ np.array([g_IMU_frame]).T).T[0]
+        ra_true_i, de_true_i = r_hat_to_ra_dec(-normalize(gInertial_true))
         ra, de = r_hat_to_ra_dec(-normalize(gInertial))
+        ra_pcpf, de_pcpf = r_hat_to_ra_dec(-normalize(g_true))
+        ra_meas_pcpf, de_meas_pcpf = r_hat_to_ra_dec(-normalize(g_measured_planetFixed))
+        
+        st.OnScreenLogMessage(f'_q_i_b       = {_q_i_b}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'ra_true_i    = {ra_true_i}, de_true_i    = {de_true_i}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'ra           = {ra}, de           = {de}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'ra_pcpf      = {ra_pcpf}, de_pcpf      = {de_pcpf}', "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f'ra_meas_pcpf = {ra_meas_pcpf}, de_meas_pcpf = {de_meas_pcpf}', "SPSTraverse", st.Severity.Info)
+        
+        rotMat_inertial = ra_dec_to_rot(ra_true_i, de_true_i)
+        rotQuat_inertial = st.math.DCM_to_Quat(rotMat_inertial)
 
-        # Render
+        rotMat_pcpf = ra_dec_to_rot(ra_pcpf, de_pcpf)
+        rotQuat_pcpf = st.math.DCM_to_Quat(rotMat_pcpf)
+        q_c_b_true = st.math.DCM_to_Quat(rotMat_pcpf.T)
+        # st.OnScreenLogMessage(f"Latitude = {de_pcpf}, Longitude = {ra_pcpf}", "SPSTraverse", st.Severity.Info)
+
+        # Render (old version)
+        pos_framed = st.frames.FramedLoc(positionNow, planetFixedFrame)
+        vel_framed = st.frames.FramedLocVel(st.frames.rv_struct(positionNow, np.zeros(3)), planetFixedFrame)
+        # rot_framed = st.frames.FramedRot(rotMat_pcpf, planetFixedFrame)
+
+        # rotQuatInertial = rot_framed.Quat_WRT(J2000Frame)
+        st.OnScreenLogMessage(f"True inertial attitude = {rotQuat_inertial}", "SPSTraverse", st.Severity.Info)
+        st.OnScreenLogMessage(f"True q_c_b             = {q_c_b_true}", "SPSTraverse", st.Severity.Info)
+
         EridaniRenderPayload = st.ParamMap()
-        EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Loc", positionNow)
-        EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Vel", np.zeros(3))
-        EridaniRenderPayload.AddParam(st.VarType.doubleV4, "Rot", planetRot @ st.math.DCM_to_Quat(ra_dec_to_rot(ra, de)))
-        EridaniRenderPayload.AddParam(st.VarType.entityRef, "Frame", planetEntity)
+        EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Loc", pos_framed.WRT_ExprIn(J2000Frame))
+        EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Vel", vel_framed.vel_WRT_ExprIn(J2000Frame))
+        EridaniRenderPayload.AddParam(st.VarType.doubleV4, "Rot", rotQuat_inertial)
+        EridaniRenderPayload.AddParam(st.VarType.entityRef, "Frame", J2000)
         EridaniRenderPayload.AddParam(st.VarType.string, "NameOverride", "SPSRender" + str(i).zfill(5))
-        payload = st.SimGlobals.Request("EridaniRenderImage", EridaniRenderPayload, timeout=datetime.timedelta(seconds=60.0))
+        EridaniRenderPayload.AddParam(st.VarType.string, "OutputPathOverride", str(renderDirLocal))
+        payload = st.SimGlobals.Request("EridaniSingleRender", EridaniRenderPayload, timeout=datetime.timedelta(seconds=60.0))
+
+        # Append properties for batch render
+        # locs.append(positionNow)
+        # vels.append(np.zeros(3))
+        # rots.append(st.math.DCM_to_Quat(planetRot @ ra_dec_to_rot(ra, de)))
+        # names.append("SPSRender" + str(i).zfill(5))
 
         if doPrint:
             st.OnScreenLogMessage(f'Rendering image {i} of {numImages} ({round(100.0 * float(i) / numImages, 2)}%): RA = {round(ra, 3)}, Dec = {round(de, 3)}', "SPSTraverse", st.Severity.Info)
+            # st.OnScreenLogMessage(f'Recording data for image {i} of {numImages} ({round(100.0 * float(i) / numImages, 2)}%): RA = {round(ra, 3)}, Dec = {round(de, 3)}', "SPSTraverse", st.Severity.Info)
 
-        true_data.append(st.math.DCM_to_Quat(ra_dec_to_rot(ra_true, de_true)))
+        # true_data.append(st.math.DCM_to_Quat(ra_dec_to_rot(ra_true_i, de_true)))
+        true_data.append(rotQuat_inertial)
 
         endTime = time.perf_counter()
         elapsedSeconds = endTime - startTime
@@ -444,7 +503,16 @@ if not os.path.exists(renderDir) or is_dir_empty(renderDir):
             projectedRemainingSeconds: float = elapsedSeconds * float(numImages - i + 1) / float(i + 1)
             projectedRemainingTime = datetime.timedelta(seconds=round(projectedRemainingSeconds))
             st.OnScreenLogMessage(f'Elapsed time: {elapsedTime}. Remaining time estimate: {projectedRemainingTime}\n', "SPSTraverse", st.Severity.Info)
-        
+
+    # Batch render (new version)
+    # EridaniBatchRenderPayload = st.ParamMap()
+    # EridaniBatchRenderPayload.AddParamArray(st.VarType.doubleV3, "Locs", locs)
+    # EridaniBatchRenderPayload.AddParamArray(st.VarType.doubleV3, "Vels", vels)
+    # EridaniBatchRenderPayload.AddParamArray(st.VarType.doubleV4, "Rots", rots)
+    # EridaniBatchRenderPayload.AddParam(st.VarType.entityRef, "Frame", planetEntity)
+    # EridaniBatchRenderPayload.AddParamArray(st.VarType.string, "NameOverrides", names)
+    # payload = st.SimGlobals.Request("EridaniBatchRender", EridaniBatchRenderPayload, timeout=datetime.timedelta(seconds=600.0))
+
     write_csv(truthDataPath, true_data)
     write_csv(gravTruthDataPath, true_accelerations)
     write_csv(gravEstDataPath, measured_accelerations)
@@ -601,6 +669,7 @@ if not Path(attitudeEstDataPath).is_file():
 
     st.OnScreenLogMessage("\n\n took " + str(time.time()-total_start) + " seconds to complete \n\n", "SPSTraverse", st.Severity.Info)
     st.OnScreenLogMessage("data saved to: " + attitudeEstDataPath, "SPSTraverse", st.Severity.Info)
+
 else:
     st.OnScreenLogMessage("Quaternion measurements already processed; skipping processing step...\n", "SPSTraverse", st.Severity.Info)
 
@@ -621,28 +690,36 @@ T_i_b_list: list[npt.NDArray] = []
 T_i_c_list: list[npt.NDArray] = []
 g_est_list: list[npt.NDArray] = []
 for i in range(len(times)):
-    T_i_b_list.append(st.math.Quat_to_DCM(q_i_b_list[i]))
+    T_i_b_list.append(st.math.Quat_to_DCM(normalize(q_i_b_list[i])))
     q_i_c = np.array([attitudeEstData[i][1], attitudeEstData[i][2], attitudeEstData[i][3], attitudeEstData[i][0]])
-    T_i_c_list.append(st.math.Quat_to_DCM(q_i_c))
+    T_i_c_list.append(st.math.Quat_to_DCM(normalize(q_i_c)))
+
+    # lat_pcpf_meas, lon_pcpf_meas = T_to_latlon((T_i_c_list[-1] @ T_i_b_list[-1].T).T)
+    # st.OnScreenLogMessage(f"Latitude = {lat_pcpf_meas}, Longitude = {lon_pcpf_meas}", "SPSTraverse", st.Severity.Info)
+    # st.OnScreenLogMessage(f"q_i_b = {q_i_b_list[i]}", "SPSTraverse", st.Severity.Info)
+    # st.OnScreenLogMessage(f"q_i_c = {q_i_c}", "SPSTraverse", st.Severity.Info)
     g_est_list.append(gravEstData[i])
 
 ###############################
 ####    SPS CALIBRATION    ####
 ###############################
 
-eps: float = 1.0e-4
+eps: float = 1.0e-6
 T_calibration = np.identity(3)
 if doCalibration:
-    phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
+    # phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
 
     def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, j: int, _gravTruthData: list[npt.NDArray]) -> npt.NDArray:
         return _gravTruthData[j]
+    
+    # def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, j: int, _gravTruthData: list[npt.NDArray]) -> npt.NDArray:
+    #     rva = st.frames.rva_struct(pos_SPS_PCPF, np.zeros(3), np.zeros(3))
+    #     framedGrav = st.SimGlobals.SampleVectorField("Gravity", st.frames.FramedLocVelAcc(rva, planetFixedFrame))
+    #     return framedGrav.ExprIn(planetFixedFrame)
 
     SampleTrueGravity_Wrapped = lambda pos, j : SampleTrueGravity(pos, j, gravTruthData)
     T_calibration = st.ProcPlanet.SPS.CalculateAlignment(calibrationCutoff, cameraPosPlanetFixed, 
         T_i_c_list, T_i_b_list, g_est_list, SampleTrueGravity_Wrapped, eps)
-
-
 
 # exit(0)
 
@@ -709,6 +786,7 @@ for j in range(len(times[calibrationCutoff:endpoint])):
     doPrint: bool = j % printInterval == 0
 
     T_i_b: npt.NDArray = T_i_b_list[j + calibrationCutoff]
+    # R_i_b: npt.NDArray = T_i_b_list[j + calibrationCutoff].T
     truth_j = truthData[j + calibrationCutoff]
     attitudeEst_j = attitudeEstData[j + calibrationCutoff]
     gravEst_j = gravEstData[j + calibrationCutoff]
@@ -718,15 +796,15 @@ for j in range(len(times[calibrationCutoff:endpoint])):
         continue
     
     q_i_c = np.array([attitudeEst_j[1], attitudeEst_j[2], attitudeEst_j[3], attitudeEst_j[0]])
-    T_i_c = st.math.Quat_to_DCM(q_i_c)
+    T_i_c = st.math.Quat_to_DCM(normalize(q_i_c))
 
     g_sensorFrame = np.array([gravEst_j[0], gravEst_j[1], gravEst_j[2]])
 
     # Coarse estimates
     r_coarse_1 = st.ProcPlanet.SPS.CoarseEstimate(T_i_b, T_i_c, T_g_c, g_sensorFrame, radiusEquatorial, mu, 
-                                                  Omega, planetData, planetFixedFrame, np.zeros(3), 0.0, 20)
+                                                  Omega, planetData, planetFixedFrame, False, np.zeros(3), 0.0, 20)
     r_coarse_2 = st.ProcPlanet.SPS.CoarseEstimate(T_i_b, T_i_c, T_g_c, g_sensorFrame, radiusEquatorial, mu, 
-                                                  Omega, planetData, planetFixedFrame, r_coarse_1, 0.0, 20)
+                                                  Omega, planetData, planetFixedFrame, True, r_coarse_1, 0.0, 20)
     
     if doPrint:
         st.OnScreenLogMessage(f'Sample point {j}:', "SPSTraverse", st.Severity.Info)
@@ -737,6 +815,9 @@ for j in range(len(times[calibrationCutoff:endpoint])):
     fineOutputs = st.ProcPlanet.SPS.FineEstimate(r_coarse_2, T_i_b, T_i_c, T_g_c, g_sensorFrame, radiusEquatorial, 
                                                  Omega, planetData, planetFixedFrame, gradientWalkFactor, tol, 
                                                  doPrint, j + calibrationCutoff, 0.0, 20)
+
+    q_c_b = st.math.DCM_to_Quat(T_i_b @ T_i_c.T)
+    # st.OnScreenLogMessage(f'KF q_c_b = {q_c_b}', "SPSTraverse", st.Severity.Info)
 
     r_bestEstimate = fineOutputs.pos
     phi_pg = fineOutputs.phi_pg
@@ -887,3 +968,5 @@ ax4.grid()
 ax4.legend()
 
 plt.show()
+
+st.leave_sim()
