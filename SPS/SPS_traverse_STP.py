@@ -172,13 +172,13 @@ np.set_printoptions(suppress=True)
 regenerateStarCatalog: bool     = False
 delete_old: bool                = True
 reprocess_star_tracker: bool    = True
-doCalibration: bool             = False
+doAlignment: bool               = True
 globalDoPrint: bool             = True
 
-calibrationCutoff: int = 5
-endpoint: int = calibrationCutoff + 2
+alignmentCutoff: int = 100
+endpoint: int = alignmentCutoff + 50
 
-numImages: int = calibrationCutoff + 2
+numImages: int = alignmentCutoff + 50
 
 ##############################
 ####    SITE SELECTION    ####
@@ -290,7 +290,7 @@ st.SimGlobals.SimClock.ResetTo(t0)
 
 time.sleep(0.1)
 
-calibrationTimeStep_s: float = 1.0
+alignmentTimeStep_s: float = 1.0
 traverseTimeStep_s: float = 100.0
 
 true_data: list[npt.NDArray] = []
@@ -298,10 +298,10 @@ true_accelerations: list[npt.NDArray] = []
 measured_accelerations: list[npt.NDArray] = []
 q_i_b_data: list[npt.NDArray] = []
 
-times_calibration = calibrationTimeStep_s * np.linspace(0.0, calibrationCutoff - 1, calibrationCutoff)
-times_traverse = times_calibration[-1] + traverseTimeStep_s + traverseTimeStep_s * np.linspace(
-    0.0, endpoint - calibrationCutoff - 1, endpoint - calibrationCutoff)
-times = np.concat((times_calibration, times_traverse))
+times_alignment = alignmentTimeStep_s * np.linspace(0.0, alignmentCutoff - 1, alignmentCutoff)
+times_traverse = times_alignment[-1] + traverseTimeStep_s + traverseTimeStep_s * np.linspace(
+    0.0, endpoint - alignmentCutoff - 1, endpoint - alignmentCutoff)
+times = np.concat((times_alignment, times_traverse))
 
 mu: float = 1e9 * planetEntity.GetParam(st.VarType.double, ["Dynamics", "GravitationalParameter_km3_s2"])
 radiusEquatorial: float = planetEntity.GetParam(st.VarType.double, ["#Planet", "General", "Radius_m"])
@@ -352,7 +352,7 @@ positions = []
 pos_i = copy.deepcopy(cameraPosPlanetFixed)
 for i in range(numImages):
     positions.append(copy.deepcopy(pos_i))
-    if i >= calibrationCutoff:
+    if i >= alignmentCutoff:
         pos_i += traverseDirection * traverseStep_m + rng.normal(0.0, traverseFollowingError_m_1sigma, size=3)
         pos_i, _ = st.ProcPlanet.SampleGround(planetData, pos_i, radiusEquatorial, 0.0, 20)
 
@@ -408,8 +408,8 @@ if is_dir_empty(renderDir):
         # Step time forward by the correct dt
         tNow: datetime.datetime = st.SimGlobals.SimClock.GetTimeNow().as_datetime()
 
-        if i < calibrationCutoff:
-            tNow += datetime.timedelta(seconds=calibrationTimeStep_s)
+        if i < alignmentCutoff:
+            tNow += datetime.timedelta(seconds=alignmentTimeStep_s)
         else:
             tNow += datetime.timedelta(seconds=traverseTimeStep_s)
 
@@ -715,12 +715,12 @@ for i in range(len(times)):
     g_est_list.append(gravEstData[i])
 
 ###############################
-####    SPS CALIBRATION    ####
+####    SPS ALIGNMENT    ####
 ###############################
 
 eps: float = 1.0e-6
-T_calibration = np.identity(3)
-if doCalibration:
+T_alignment = np.identity(3)
+if doAlignment:
     # phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
 
     def SampleTrueGravity(pos_SPS_PCPF: npt.NDArray, j: int, _gravTruthData: list[npt.NDArray]) -> npt.NDArray:
@@ -732,7 +732,7 @@ if doCalibration:
     #     return framedGrav.ExprIn(planetFixedFrame)
 
     SampleTrueGravity_Wrapped = lambda pos, j : SampleTrueGravity(pos, j, gravTruthData)
-    T_calibration = st.ProcPlanet.SPS.CalculateAlignment(calibrationCutoff, cameraPosPlanetFixed, 
+    T_alignment = st.ProcPlanet.SPS.CalculateAlignment(alignmentCutoff, cameraPosPlanetFixed, 
         T_i_c_list, T_i_b_list, g_est_list, SampleTrueGravity_Wrapped, eps)
 
 # exit(0)
@@ -777,33 +777,33 @@ Pxx_history: list[npt.NDArray] = []
 alpha_underweight = 3.0
 gamma_underweight = 0.3
 # T_g_c = np.identity(3)  # transformation from gravity to camera frame
-T_g_c = T_calibration.T  # transformation from gravity to camera frame
+T_g_c = T_alignment.T  # transformation from gravity to camera frame
 
 estimatedPositions: list[npt.NDArray] = []
 
-tStart = st.timestamp.from_datetime(t0.as_datetime() + datetime.timedelta(seconds=calibrationCutoff * calibrationTimeStep_s))
+tStart = st.timestamp.from_datetime(t0.as_datetime() + datetime.timedelta(seconds=alignmentCutoff * alignmentTimeStep_s))
 st.SimGlobals.SimClock.ResetTo(tStart)
 
-for j in range(len(times[calibrationCutoff:endpoint])):
+for j in range(len(times[alignmentCutoff:endpoint])):
 
     ######################################
     ####    Measurement Processing    ####
     ######################################
 
     tRightNow: datetime.datetime = st.SimGlobals.SimClock.GetTimeNow().as_datetime()
-    if j < calibrationCutoff:
-        tRightNow += datetime.timedelta(seconds=calibrationTimeStep_s)
+    if j < alignmentCutoff:
+        tRightNow += datetime.timedelta(seconds=alignmentTimeStep_s)
     else:
         tRightNow += datetime.timedelta(seconds=traverseTimeStep_s)
     st.SimGlobals.SimClock.ResetTo(st.timestamp.from_datetime(tRightNow))
     
     doPrint: bool = j % printInterval == 0
 
-    T_i_b: npt.NDArray = T_i_b_list[j + calibrationCutoff]
-    # R_i_b: npt.NDArray = T_i_b_list[j + calibrationCutoff].T
-    truth_j = truthData[j + calibrationCutoff]
-    attitudeEst_j = attitudeEstData[j + calibrationCutoff]
-    gravEst_j = gravEstData[j + calibrationCutoff]
+    T_i_b: npt.NDArray = T_i_b_list[j + alignmentCutoff]
+    # R_i_b: npt.NDArray = T_i_b_list[j + alignmentCutoff].T
+    truth_j = truthData[j + alignmentCutoff]
+    attitudeEst_j = attitudeEstData[j + alignmentCutoff]
+    gravEst_j = gravEstData[j + alignmentCutoff]
     
     if attitudeEst_j[0] == 999 or attitudeEst_j[1] == 999 or attitudeEst_j[2] == 999 or attitudeEst_j[3] == 999:
         st.OnScreenLogMessage(f'Warning: skipped measurement at index {j} (invalid quaternion).', "SPSTraverse", st.Severity.Info)
@@ -828,7 +828,7 @@ for j in range(len(times[calibrationCutoff:endpoint])):
     
     fineOutputs = st.ProcPlanet.SPS.FineEstimate(r_coarse_2, T_i_b, T_i_c, T_g_c, g_sensorFrame, radiusEquatorial, 
                                                  Omega, planetData, planetFixedFrame, gradientWalkFactor, tol, 
-                                                 doPrint, j + calibrationCutoff, 0.0, 20)
+                                                 doPrint, j + alignmentCutoff, 0.0, 20)
 
     q_c_b = st.math.DCM_to_Quat(T_i_b @ T_i_c.T)
     # st.OnScreenLogMessage(f'KF q_c_b = {q_c_b}', "SPSTraverse", st.Severity.Info)
@@ -886,7 +886,7 @@ for j in range(len(times[calibrationCutoff:endpoint])):
     ####    Clean-up and Printing    ####
     #####################################
 
-    percentComplete = round(100.0 * float(j) / float(len(times[calibrationCutoff:endpoint])), 3)
+    percentComplete = round(100.0 * float(j) / float(len(times[alignmentCutoff:endpoint])), 3)
     
     endTime = time.perf_counter()
     elapsedSeconds = endTime - startTime
@@ -900,7 +900,7 @@ for j in range(len(times[calibrationCutoff:endpoint])):
 ####    PLOTTING    ####
 ########################
 
-cameraTraversePositions: list[npt.NDArray] = positions[calibrationCutoff:endpoint]
+cameraTraversePositions: list[npt.NDArray] = positions[alignmentCutoff:endpoint]
 
 fig1 = plt.figure(layout='constrained')
 ax1 = fig1.add_subplot(131)
@@ -924,30 +924,30 @@ camPos_y = np.array([camPos[1] for camPos in cameraTraversePositions])
 camPos_z = np.array([camPos[2] for camPos in cameraTraversePositions])
 
 subsample: int = 1
-ax1.scatter(times[calibrationCutoff:endpoint][::subsample], z_x[::subsample] - camPos_x[::subsample], label=r'$z(0)$', color='purple')
-ax1.plot(times[calibrationCutoff:endpoint], mx_x - camPos_x, label=r"$m_{x}(0)$", color='blue')
-ax1.plot(times[calibrationCutoff:endpoint], -3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r', label=r"$P_{xx}(0,0)$")
-ax1.plot(times[calibrationCutoff:endpoint], 3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r')
+ax1.scatter(times[alignmentCutoff:endpoint][::subsample], z_x[::subsample] - camPos_x[::subsample], label=r'$z(0)$', color='purple')
+ax1.plot(times[alignmentCutoff:endpoint], mx_x - camPos_x, label=r"$m_{x}(0)$", color='blue')
+ax1.plot(times[alignmentCutoff:endpoint], -3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r', label=r"$P_{xx}(0,0)$")
+ax1.plot(times[alignmentCutoff:endpoint], 3.0 * np.sqrt(Pxx_x), linestyle='dashed', color='r')
 ax1.set_xlabel("Time (s)")
 ax1.set_ylabel("Position error (m)")
 ax1.set_title(r"Error in $m_{x}(0)$ over Time")
 ax1.grid()
 ax1.legend()
 
-ax2.scatter(times[calibrationCutoff:endpoint][::subsample], z_y[::subsample] - camPos_y[::subsample], label=r'$z(1)$', color='purple')
-ax2.plot(times[calibrationCutoff:endpoint], mx_y - camPos_y, label=r"$m_{x}(1)$", color='blue')
-ax2.plot(times[calibrationCutoff:endpoint], -3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r', label=r"$P_{xx}(1,1)$")
-ax2.plot(times[calibrationCutoff:endpoint], 3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r')
+ax2.scatter(times[alignmentCutoff:endpoint][::subsample], z_y[::subsample] - camPos_y[::subsample], label=r'$z(1)$', color='purple')
+ax2.plot(times[alignmentCutoff:endpoint], mx_y - camPos_y, label=r"$m_{x}(1)$", color='blue')
+ax2.plot(times[alignmentCutoff:endpoint], -3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r', label=r"$P_{xx}(1,1)$")
+ax2.plot(times[alignmentCutoff:endpoint], 3.0 * np.sqrt(Pxx_y), linestyle='dashed', color='r')
 ax2.set_xlabel("Time (s)")
 ax2.set_ylabel("Position error (m)")
 ax2.set_title(r"Error in $m_{x}(1)$ over Time")
 ax2.grid()
 ax2.legend()
 
-ax3.scatter(times[calibrationCutoff:endpoint][::subsample], z_z[::subsample] - camPos_z[::subsample], label=r'$z(2)$', color='purple')
-ax3.plot(times[calibrationCutoff:endpoint], mx_z - camPos_z, label=r"$m_{x}(2)$", color='blue')
-ax3.plot(times[calibrationCutoff:endpoint], -3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r', label=r"$P_{xx}(2,2)$")
-ax3.plot(times[calibrationCutoff:endpoint], 3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r')
+ax3.scatter(times[alignmentCutoff:endpoint][::subsample], z_z[::subsample] - camPos_z[::subsample], label=r'$z(2)$', color='purple')
+ax3.plot(times[alignmentCutoff:endpoint], mx_z - camPos_z, label=r"$m_{x}(2)$", color='blue')
+ax3.plot(times[alignmentCutoff:endpoint], -3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r', label=r"$P_{xx}(2,2)$")
+ax3.plot(times[alignmentCutoff:endpoint], 3.0 * np.sqrt(Pxx_z), linestyle='dashed', color='r')
 ax3.set_xlabel("Time (s)")
 ax3.set_ylabel("Position error (m)")
 ax3.set_title(r"Error in $m_{x}(2)$ over Time")
