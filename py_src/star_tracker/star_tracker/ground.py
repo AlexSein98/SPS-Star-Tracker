@@ -64,12 +64,14 @@ def kvector(input_cat):
     k[0] = 0
     k[-1] = nrow
     for x in np.arange(1, nrow-1, 1, dtype=int):
+        if x % 1000 == 0:
+            print(f"K-Vector index {x}/{nrow-1}")
         # Create k-vector catalog by finding the number of
         # items in the original catalog that are below the
         # value of the line
         l = k[x-1][0]  # grab the previous (smaller) element in the array
         z = m*(x+1) + q  # eqn 1
-        for y in np.arange(k[x-1], nrow-1, 1, dtype=int):
+        for y in np.arange(k[x-1].item(), nrow-1, 1, dtype=int):
 
             # If the calculated z matches/exceeds that of the current catalog
             # entry, increment l by 1
@@ -163,10 +165,10 @@ def proper_motion_correction(ra_de_deg, pm_rade_mas, plx_mas, rB, t, t_ep, axis=
     if ra_de_deg.shape != pm_rade_mas.shape:
         raise ValueError("ERROR ["+str(__name__)+"]: Dimensions for RA/DEC and proper motion do not agree")
 
-    deg2rad = math.pi/180;
-    arcsec2deg = 1/3600;
-    mas2arcsec = 1/1000;
-    mas2rad = mas2arcsec*arcsec2deg*deg2rad;
+    deg2rad = math.pi/180
+    arcsec2deg = 1/3600
+    mas2arcsec = 1/1000
+    mas2rad = mas2arcsec*arcsec2deg*deg2rad
 
     AU = 1.496e8; #in km
     # return 3xn Line-of-Sight vector array and orthogonal
@@ -189,7 +191,9 @@ def proper_motion_correction(ra_de_deg, pm_rade_mas, plx_mas, rB, t, t_ep, axis=
     # Find location of observer in units of AU
     if rB is None:
         rB = np.array([[149597870.693],[0],[0]])
-    rObs_AU = rB/au;
+    # elif rB.shape == (3,):
+    #     rB = np.array([rB]).T
+    rObs_AU = rB/au
 
     # Define rB as BCRF position (in km) of celestial object that the spacecraft orbits
     # if no rB provided, assume that s/c is orbiting Earth: 149597870.693 km
@@ -197,7 +201,7 @@ def proper_motion_correction(ra_de_deg, pm_rade_mas, plx_mas, rB, t, t_ep, axis=
     # Incorporate proper motion into already existing u vector:
     # ui = l_i+(t-t_ep)*(mua_i*p+mud_i*q)-(w_i*rB)/AU
     r_au_mat = matlib.repmat(rObs_AU, 1, len(plx_rad))
-    plx = -plx_rad*r_au_mat;
+    plx = -plx_rad*r_au_mat
 
     u = los + pm + plx
     return xforms.normalize_vector_array(u), los
@@ -264,9 +268,11 @@ def create_star_catalog(starcat_file, brightness_thresh, cat_ep=None, t=None, rB
     import itertools as it
 
     # Correct catalog entries for proper motion
+    print("Started star catalog creation!")
     u, _ = read_star_catalog(
         starcat_file, brightness_thresh, excess_rows=excess_rows,
         cat_ep=cat_ep, t=t, rB=rB, index_col=index_col)
+    print("Finished star catalog creation!")
 
     # Create star pairs using nchoosek
     # star_idx = np.arange(0, len(u[0]))
@@ -278,7 +284,9 @@ def create_star_catalog(starcat_file, brightness_thresh, cat_ep=None, t=None, rB
                              u[:, star_pairs[:, 1]]))
 
     # Calculate interstar angles
+    print("Started interstar angle generation!")
     istar_angle = rpi_core.interstar_angle(u_starpairs)
+    print("Finished interstar angle generation!")
 
     # Remove star pairs that fall outside field of view angle
     if fov is not None:
@@ -288,7 +296,9 @@ def create_star_catalog(starcat_file, brightness_thresh, cat_ep=None, t=None, rB
         del sp_fov, fov
 
     # Create star pair catalog with interstar angle
+    print("Started kvector creation!")
     k, m, q, isa_cat = kvector(istar_angle)
+    print("Finished kvector creation!")
 
     isa_cat_idx = np.hstack((star_pairs, isa_cat))
 

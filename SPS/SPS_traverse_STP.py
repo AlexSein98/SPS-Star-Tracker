@@ -169,27 +169,27 @@ np.set_printoptions(suppress=True)
 ####    GLOBAL PARAMETERS    ####
 #################################
 
-regenerateStarCatalog: bool     = False
+regenerateStarCatalog: bool     = True
 delete_old: bool                = True
 reprocess_star_tracker: bool    = True
 doAlignment: bool               = True
 globalDoPrint: bool             = True
 
-alignmentCutoff: int = 100
-endpoint: int = alignmentCutoff + 50
+alignmentCutoff: int = 50
+endpoint: int = alignmentCutoff + 20
 
-numImages: int = alignmentCutoff + 50
+numImages: int = alignmentCutoff + 20
 
 ##############################
 ####    SITE SELECTION    ####
 ##############################
 
 # site: str = "Ideal"
+site: str = "Apollo11"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
 # site: str = "ConnectingRidge"
 # site: str = "NobileRim1"
-site: str = "DummyTestSite"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
 int_seed = int(hash_object.hexdigest(), 16)
@@ -203,6 +203,12 @@ if site == "Ideal":
     phi_pg_0 = 4.0
     lon_pg_0 = -29.4
     h_ellp_0 = 0.0
+
+elif site == "Apollo11":
+    # Something with low gravity variation (ideal)
+    phi_pg_0 = 0.67
+    lon_pg_0 = 23.47
+    h_ellp_0 = -1500.0
 
 elif site == "Apollo15":
     # Something like Apollo 15
@@ -227,12 +233,6 @@ elif site == "NobileRim1":
     phi_pg_0 = -85.4
     lon_pg_0 = 35.3
     h_ellp_0 = 1743.0
-
-elif site == "DummyTestSite":
-    # Something with low gravity variation (ideal)
-    phi_pg_0 = 4.0
-    lon_pg_0 = -29.4
-    h_ellp_0 = 0.0
 
 #################################
 ####    PLANET PARAMETERS    ####
@@ -282,7 +282,7 @@ bias = np.linalg.cholesky(biasSigma_2) @ rng.normal(0.0, 1.0, size=3)
 if delete_old:
     if os.path.exists(renderDir):
         shutil.rmtree(renderDir)
-    os.mkdir(renderDir)
+    Path(renderDir).mkdir(parents=True)
 
 # Time
 t0: st.timestamp = st.timestamp.from_datetime(datetime.datetime(year=2026, month=5, day=22, hour=16))
@@ -386,9 +386,13 @@ if regenerateStarCatalog:
     simTimeAstropy = astrotime.Time(simTimeNow, format='datetime')
     planetLoc = planetEntity.getLocation().WRT_ExprIn(J2000Frame)
 
+    st.OnScreenLogMessage("Got to star catalog creation!", "SPSStarCatalog", st.Severity.Info)
+
     ground.create_star_catalog(starcat_file=starcat_file, brightness_thresh=b_thresh,
                                excess_rows=excess_rows, index_col=index_col, fov=fov,
-                               save_vals=save_vals, rB=0.001*planetLoc, save_dir=save_dir, t=simTimeAstropy)
+                               save_vals=save_vals, rB=np.array([0.001*planetLoc]).T, save_dir=save_dir, t=simTimeAstropy)
+    
+    st.OnScreenLogMessage("Got past star catalog creation!", "SPSStarCatalog", st.Severity.Info)
 
 #############################
 ####    RENDER IMAGES    ####
@@ -419,7 +423,8 @@ if is_dir_empty(renderDir):
         # Sample gravity vector
         positionNow = positions[i]
         stateNow = st.frames.FramedLocVelAcc(st.frames.rva_struct(positionNow, np.zeros(3), np.zeros(3)), planetFixedFrame)
-        g = st.SimGlobals.SampleVectorField("Gravity", stateNow).ExprIn(planetFixedFrame)    
+        g = st.SimGlobals.SampleVectorField("Gravity", stateNow).ExprIn(planetFixedFrame)
+        g += st.SimGlobals.SampleVectorField("ThirdBodyGravity", stateNow).ExprIn(planetFixedFrame)
         g -= np.cross(Omega, np.cross(Omega, positionNow))  # Handle being on the surface of the planet
         g_true = copy.deepcopy(g)
         g_true_framed = st.frames.FramedVector(g_true, planetFixedFrame)
