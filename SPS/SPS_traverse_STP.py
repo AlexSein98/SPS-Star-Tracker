@@ -1,5 +1,7 @@
 import os, sys, time, datetime, traceback
 import spaceteams as st
+import scipy.special as special
+from scipy.optimize import curve_fit
 # Can import other modules here, but any code that actually executes before st.connect_to_sim() 
 # will have less helpful logging and error handling. SimGlobals and logger functions are not yet available.
 
@@ -105,6 +107,158 @@ def write_csv(filepath: str, data: list[np.ndarray[float]]):
             writer.writerow(line)
 
 
+# Statistics
+def pdf_gauss(x: float | npt.NDArray, mean: float, std: float):
+    return (1.0 / np.sqrt(2.0 * np.pi * std ** 2)) * np.exp(-((x - mean) ** 2) / (std ** 2))
+
+
+def pdf_cauchy(x: float | npt.NDArray, median: float, gamma: float):
+    return (1.0 / np.pi) * (gamma / ((x - median) ** 2  + gamma ** 2))
+
+
+def pdf_mix(x: float | npt.NDArray, x0: float, gamma: float, factor: float):
+    return factor * pdf_cauchy(x, x0, gamma) + (1.0 - factor) * pdf_gauss(x, x0, gamma)
+
+
+def positivize_quat(q: npt.NDArray) -> npt.NDArray:
+    if q[3] > 0.0:
+        return q
+    else:
+        return np.array([-q[0], -q[1], -q[2], -q[3]])
+
+def quat_mult(q1: npt.NDArray, q2: npt.NDArray):
+    x = q1[0]
+    y = q1[1]
+    z = q1[2]
+    w = q1[3]
+
+    x2 = q2[0]
+    y2 = q2[1]
+    z2 = q2[2]
+    w2 = q2[3]
+
+    q_product = np.array([w * x2 + x * w2 + y * z2 - z * y2,
+                          w * y2 - x * z2 + y * w2 + z * x2,
+                          w * z2 + x * y2 - y * x2 + z * w2,
+                          w * w2 - x * x2 - y * y2 - z * z2])
+    return positivize_quat(q_product)
+
+
+def quat_inverse(q: npt.NDArray):
+    if q[3] > 0.0:
+        q_inv = np.array([-q[0], -q[1], -q[2], q[3]])
+        return q_inv
+    else:
+        q_inv = np.array([q[0], q[1], q[2], -q[3]])
+        return q_inv
+
+
+def read_quats(filename: str) -> list[npt.NDArray]:
+    quats = []
+    with open(filename, "r") as f:
+        for line in f:
+            if line.startswith("CPU"):
+                continue
+            curr = line.strip().split(",")
+            w = float(curr[4])
+            x = float(curr[5])
+            y = float(curr[6])
+            z = float(curr[7])
+            if w > 0.0:
+                quats.append(np.array([x, y, z, w]))
+            else:
+                quats.append(np.array([-x, -y, -z, -w]))
+    return quats
+
+
+def xi_transpose(q: npt.NDArray, active: bool) -> npt.NDArray:
+    qx = copy.deepcopy(q[0])
+    qy = copy.deepcopy(q[1])
+    qz = copy.deepcopy(q[2])
+    qw = copy.deepcopy(q[3])
+
+    if active:
+        xi = np.array([[qw, -qz, qy],
+                    [qz, qw, -qx],
+                    [-qy, qx, qw],
+                    [-qx, -qy, -qz]])
+        return xi.T
+    else:
+        xi = np.array([[qw, qz, -qy],
+                       [-qz, qw, qx],
+                       [qy, -qx, qw],
+                       [-qx, -qy, -qz]])
+        return xi.T
+
+
+def estimate_omega(quats: list[npt.NDArray], deltaT: float, T_unrotate: list[npt.NDArray]) -> npt.NDArray:
+    """
+    IMPORTANT:
+    q_dot is kept as a raw 4-vector and is NOT normalized.
+    """
+    # quats = align_quaternion_signs(quats)
+
+    N = len(quats) - 1
+    omega_sum = np.zeros(3)
+    omega_history: list[npt.NDArray] = []
+
+    for i in range(1, N - 1):
+        q_prev = st.math.DCM_to_Quat(T_unrotate[i - 1] @ st.math.Quat_to_DCM(normalize(quats[i - 1])))
+        q_curr = st.math.DCM_to_Quat(T_unrotate[i] @ st.math.Quat_to_DCM(normalize(quats[i])))
+        q_next = st.math.DCM_to_Quat(T_unrotate[i + 1] @ st.math.Quat_to_DCM(normalize(quats[i + 1])))
+
+        q_dot = np.array([[(q_next[0] - q_prev[0]) / (2.0 * deltaT),
+                           (q_next[1] - q_prev[1]) / (2.0 * deltaT),
+                           (q_next[2] - q_prev[2]) / (2.0 * deltaT),
+                           (q_next[3] - q_prev[3]) / (2.0 * deltaT)]]).T
+        
+        T_extra = np.array([[0, 0, 1], 
+                            [1, 0, 0], 
+                            [0, 1, 0]])
+        
+        omega_i = (2.0 * T_extra @ xi_transpose(q_curr, False) @ q_dot).T[0]
+        omega_history.append(omega_i)
+        omega_sum += omega_i
+
+    return omega_sum / float(len(omega_history)), omega_history
+
+
+def estimate_omega_EnrightForm(quats: list[npt.NDArray], deltaT: float, T_unrotate: list[npt.NDArray]) -> npt.NDArray:
+    """
+    IMPORTANT:
+    q_dot is kept as a raw 4-vector and is NOT normalized.
+    """
+    # quats = align_quaternion_signs(quats)
+
+    N = len(quats) - 1
+    omega_sum = np.zeros(3)
+    omega_history: list[npt.NDArray] = []
+
+    for i in range(1, N):
+        # q_prev = st.math.DCM_to_Quat(st.math.Quat_to_DCM(normalize(quats[i - 1])) @ T_unrotate[i - 1])
+        # q_curr = st.math.DCM_to_Quat(st.math.Quat_to_DCM(normalize(quats[i])) @ T_unrotate[i])
+        q_prev = quats[i - 1]
+        q_curr = quats[i]
+        # q_next = st.math.DCM_to_Quat(T_unrotate[i + 1] @ st.math.Quat_to_DCM(normalize(quats[i + 1])))
+
+        delta_q = quat_mult(q_curr, quat_inverse(q_prev))
+        angle: float = 2.0 * np.arccos(delta_q[3])
+        axis: npt.NDArray = delta_q[0:3] / np.sin(0.5 * angle)
+
+        # q_unrotate_prev = st.math.DCM_to_Quat(T_unrotate[i - 1])
+        # q_unrotate_curr = st.math.DCM_to_Quat(T_unrotate[i])
+        # T_unrotate_avg = st.math.Quat_to_DCM(normalize(0.5 * (q_unrotate_prev + q_unrotate_curr)))
+        # omega_i = T_unrotate_avg @ (angle * axis / deltaT)
+
+        omega_i = T_unrotate[i] @ (-angle * axis / deltaT)
+
+        # omega_i = angle * axis / deltaT
+        omega_history.append(omega_i)
+        omega_sum += omega_i
+
+    return omega_sum / float(len(omega_history)), omega_history
+
+
 os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
 
 ##################################
@@ -119,7 +273,7 @@ args.cubicInterp = True
 
 planetData.AddGeoBinAltimetryLayer(1.0, moonGlobalData, args)
 
-time.sleep(5.0)
+# time.sleep(5.0)
 
 
 # Wait for Eridani to load (TODO: probably don't need this because 
@@ -143,21 +297,6 @@ def rad_to_arcsec(rad: float) -> float:
     return 3600.0 * np.rad2deg(rad)
 
 
-def quat_mult(q1, q2):
-    w = q1[3]
-    x = q1[0]
-    y = q1[1]
-    z = q1[2]
-    w2 = q2[3]
-    x2 = q2[0]
-    y2 = q2[1]
-    z2 = q2[2]
-    return np.array([w * x2 + x * w2 + y * z2 - z * y2,
-                     w * y2 - x * z2 + y * w2 + z * x2,
-                     w * z2 + x * y2 - y * x2 + z * w2,
-                     w * w2 - x * x2 - y * y2 - z * z2])
-
-
 def is_dir_empty(path):
     # Returns True if empty, False otherwise
     return not any(Path(path).iterdir())
@@ -169,26 +308,27 @@ np.set_printoptions(suppress=True)
 ####    GLOBAL PARAMETERS    ####
 #################################
 
-regenerateStarCatalog: bool     = True
+regenerateStarCatalog: bool     = False  # DO NOT USE THIS; CURRENTLY BROKEN
 delete_old: bool                = True
 reprocess_star_tracker: bool    = True
 doAlignment: bool               = True
+doAngVel: bool                  = True
 globalDoPrint: bool             = True
 
-alignmentCutoff: int = 50
-endpoint: int = alignmentCutoff + 20
+alignmentCutoff: int = 300
+endpoint: int = alignmentCutoff + 200
 
-numImages: int = alignmentCutoff + 20
+numImages: int = alignmentCutoff + 200
 
 ##############################
 ####    SITE SELECTION    ####
 ##############################
 
 # site: str = "Ideal"
-site: str = "Apollo11"
+# site: str = "Apollo11"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
-# site: str = "ConnectingRidge"
+site: str = "ConnectingRidge"
 # site: str = "NobileRim1"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
@@ -255,13 +395,14 @@ attitudeEstDataPath = os.path.join(outputDir, "attitudes_" + planetName + ".csv"
 gravTruthDataPath = os.path.join(outputDir, "true_gravities_" + planetName + ".csv")
 gravEstDataPath = os.path.join(outputDir, "measurements_" + planetName + ".csv")
 q_i_b_DataPath = os.path.join(outputDir, "q_i_b_" + planetName + ".csv")
+omega_i_b_DataPath = os.path.join(outputDir, "omega_i_b_" + planetName + ".csv")
 
 #############################
 ####    ERROR SOURCES    ####
 #############################
 
 # Random number generator
-rng = np.random.default_rng(int_seed + 100)
+rng = np.random.default_rng(int_seed + 200)
 
 addMeasurementBias: bool = False
 addMeasurementNoise: bool = True
@@ -297,6 +438,7 @@ true_data: list[npt.NDArray] = []
 true_accelerations: list[npt.NDArray] = []
 measured_accelerations: list[npt.NDArray] = []
 q_i_b_data: list[npt.NDArray] = []
+omega_i_b_data: list[npt.NDArray] = []
 
 times_alignment = alignmentTimeStep_s * np.linspace(0.0, alignmentCutoff - 1, alignmentCutoff)
 times_traverse = times_alignment[-1] + traverseTimeStep_s + traverseTimeStep_s * np.linspace(
@@ -307,7 +449,7 @@ mu: float = 1e9 * planetEntity.GetParam(st.VarType.double, ["Dynamics", "Gravita
 radiusEquatorial: float = planetEntity.GetParam(st.VarType.double, ["#Planet", "General", "Radius_m"])
 Omega = planetEntity.getAngVelocity().WRT(J2000Frame).ExprIn(planetFixedFrame)
 
-st.OnScreenLogMessage(f"Planet angular velocity (Omega) = {Omega}", "SPSTraverse", st.Severity.Info)
+st.OnScreenLogMessage(f"Planet angular velocity (Omega) = {np.rad2deg(Omega)} deg/s", "SPSTraverse", st.Severity.Info)
 # Omega = np.array([0.0, 0.0, 2.66e-6])  # Expressed in the planet-fixed frame
 
 startTime = time.perf_counter()
@@ -406,6 +548,8 @@ if is_dir_empty(renderDir):
     # vels: list[npt.NDArray] = []
     # rots: list[npt.NDArray] = []
     # names: list[str] = []
+    
+    planetStateDummy = st.frames.FramedLocVelAcc(st.frames.rva_struct(np.zeros(3), np.zeros(3), np.zeros(3)), planetFixedFrame)
     for i in range(numImages):
         doPrint: bool = i % printInterval == 0 and globalDoPrint
 
@@ -424,8 +568,12 @@ if is_dir_empty(renderDir):
         positionNow = positions[i]
         stateNow = st.frames.FramedLocVelAcc(st.frames.rva_struct(positionNow, np.zeros(3), np.zeros(3)), planetFixedFrame)
         g = st.SimGlobals.SampleVectorField("Gravity", stateNow).ExprIn(planetFixedFrame)
-        g += st.SimGlobals.SampleVectorField("ThirdBodyGravity", stateNow).ExprIn(planetFixedFrame)
-        g -= np.cross(Omega, np.cross(Omega, positionNow))  # Handle being on the surface of the planet
+
+        g_thirdBody = st.SimGlobals.SampleVectorField("ThirdBodyGravity", stateNow).ExprIn(planetFixedFrame)
+        g_thirdBody -= st.SimGlobals.SampleVectorField("ThirdBodyGravity", planetStateDummy).ExprIn(planetFixedFrame)
+        st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSTraverse", st.Severity.Info)
+
+        g += g_thirdBody - np.cross(Omega, np.cross(Omega, positionNow))
         g_true = copy.deepcopy(g)
         g_true_framed = st.frames.FramedVector(g_true, planetFixedFrame)
         
@@ -442,8 +590,10 @@ if is_dir_empty(renderDir):
         measured_accelerations.append(g_IMU_frame)
 
         planetRot = planetEntity.getRotation().DCM_WRT(J2000Frame)  # Passive, planet attitude WRT J2000
+        planetAngVel = planetEntity.getAngVelocity().WRT(J2000Frame).ExprIn(planetFixedFrame)
         _q_i_b = st.math.DCM_to_Quat(planetRot)
         q_i_b_data.append(_q_i_b)
+        omega_i_b_data.append(planetAngVel)
 
         gInertial_true = g_true_framed.ExprIn(J2000Frame)
         # gInertial_true = (planetRot.T @ np.array([g_true]).T).T[0]
@@ -453,10 +603,10 @@ if is_dir_empty(renderDir):
         g_measured_framed = st.frames.FramedVector(g_measured_planetFixed, planetFixedFrame)
         gInertial = g_measured_framed.ExprIn(J2000Frame)
 
-        st.OnScreenLogMessage(f'g_true                 = {g_true}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'gInertial_true         = {gInertial_true}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'g_measured_planetFixed = {g_measured_planetFixed}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'gInertial              = {gInertial}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'g_true                 = {g_true}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'gInertial_true         = {gInertial_true}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'g_measured_planetFixed = {g_measured_planetFixed}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'gInertial              = {gInertial}', "SPSTraverse", st.Severity.Info)
 
         # gInertial = (planetRot.T @ T_P_G.T @ np.array([g_IMU_frame]).T).T[0]
         ra_true_i, de_true_i = r_hat_to_ra_dec(-normalize(gInertial_true))
@@ -464,11 +614,11 @@ if is_dir_empty(renderDir):
         ra_pcpf, de_pcpf = r_hat_to_ra_dec(-normalize(g_true))
         ra_meas_pcpf, de_meas_pcpf = r_hat_to_ra_dec(-normalize(g_measured_planetFixed))
         
-        st.OnScreenLogMessage(f'_q_i_b       = {_q_i_b}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'ra_true_i    = {ra_true_i}, de_true_i    = {de_true_i}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'ra           = {ra}, de           = {de}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'ra_pcpf      = {ra_pcpf}, de_pcpf      = {de_pcpf}', "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f'ra_meas_pcpf = {ra_meas_pcpf}, de_meas_pcpf = {de_meas_pcpf}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'_q_i_b       = {_q_i_b}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'ra_true_i    = {ra_true_i}, de_true_i    = {de_true_i}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'ra           = {ra}, de           = {de}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'ra_pcpf      = {ra_pcpf}, de_pcpf      = {de_pcpf}', "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f'ra_meas_pcpf = {ra_meas_pcpf}, de_meas_pcpf = {de_meas_pcpf}', "SPSTraverse", st.Severity.Info)
 
         # Passive transform from inertial frame to surface (grav vector) frame (x axis along -grav)
         # We get this by converting a pointing vec in inertial frame to ra/dec, then converting
@@ -487,8 +637,8 @@ if is_dir_empty(renderDir):
         # rot_framed = st.frames.FramedRot(rotMat_pcpf, planetFixedFrame)
 
         # rotQuatInertial = rot_framed.Quat_WRT(J2000Frame)
-        st.OnScreenLogMessage(f"True inertial attitude = {q_I_S_true_passive}", "SPSTraverse", st.Severity.Info)
-        st.OnScreenLogMessage(f"True q_c_b             = {q_PCPF_S_true_passive}", "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f"True inertial attitude = {q_I_S_true_passive}", "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f"True q_c_b             = {q_PCPF_S_true_passive}", "SPSTraverse", st.Severity.Info)
 
         cameraEntity.setRotation(st.frames.FramedRot(T_I_S_true, J2000Frame))
 
@@ -536,6 +686,7 @@ if is_dir_empty(renderDir):
     write_csv(gravTruthDataPath, true_accelerations)
     write_csv(gravEstDataPath, measured_accelerations)
     write_csv(q_i_b_DataPath, q_i_b_data)
+    write_csv(omega_i_b_DataPath, omega_i_b_data)
 
 else:
     st.OnScreenLogMessage("Render directory not empty; skipping render step...\n", "SPSTraverse", st.Severity.Info)
@@ -698,6 +849,7 @@ attitudeEstData = read_csv(attitudeEstDataPath, ignore=[0, 1, 2, 3], hasHeader=T
 gravTruthData = read_csv(gravTruthDataPath)
 gravEstData = read_csv(gravEstDataPath)
 q_i_b_list = read_csv(q_i_b_DataPath)
+omega_i_b_list = read_csv(omega_i_b_DataPath)
 
 # Very basic error handling if datasets are not the same length
 if not (len(truthData) == len(attitudeEstData) == len(gravEstData)):
@@ -706,10 +858,12 @@ if not (len(truthData) == len(attitudeEstData) == len(gravEstData)):
 
 # Initialize all inertial-to-planet attitude matrices
 T_i_b_list: list[npt.NDArray] = []
+angvel_i_b_list: list[npt.NDArray] = []
 T_i_c_list: list[npt.NDArray] = []
 g_est_list: list[npt.NDArray] = []
 for i in range(len(times)):
     T_i_b_list.append(st.math.Quat_to_DCM(normalize(q_i_b_list[i])))
+    angvel_i_b_list.append(np.array([omega_i_b_list[i][0], omega_i_b_list[i][1], omega_i_b_list[i][2]]))
     q_i_c = np.array([attitudeEstData[i][1], attitudeEstData[i][2], attitudeEstData[i][3], attitudeEstData[i][0]])
     T_i_c_list.append(st.math.Quat_to_DCM(normalize(q_i_c)))
 
@@ -739,6 +893,57 @@ if doAlignment:
     SampleTrueGravity_Wrapped = lambda pos, j : SampleTrueGravity(pos, j, gravTruthData)
     T_alignment = st.ProcPlanet.SPS.CalculateAlignment(alignmentCutoff, cameraPosPlanetFixed, 
         T_i_c_list, T_i_b_list, g_est_list, SampleTrueGravity_Wrapped, eps)
+
+    # gravityDiffs: list[npt.NDArray] = [np.asarray(g_est_list[j]) - np.asarray(gravTruthData[j]) for j in range(alignmentCutoff)]
+    # gravityDiffs_x: list[float] = [gravityDiffs[j][0] for j in range(alignmentCutoff)]
+    # gravityDiffs_y: list[float] = [gravityDiffs[j][1] for j in range(alignmentCutoff)]
+    # gravityDiffs_z: list[float] = [gravityDiffs[j][2] for j in range(alignmentCutoff)]
+
+    # numBins: int = int(alignmentCutoff / 2)
+    # counts_x, bin_edges_x = np.histogram(gravityDiffs_x, bins=numBins, density=True)
+    # counts_y, bin_edges_y = np.histogram(gravityDiffs_x, bins=numBins, density=True)
+    # counts_z, bin_edges_z = np.histogram(gravityDiffs_x, bins=numBins, density=True)
+
+    # bin_centers_x = (bin_edges_x[:-1] + bin_edges_x[1:]) / 2.0
+    # bin_centers_y = (bin_edges_y[:-1] + bin_edges_y[1:]) / 2.0
+    # bin_centers_z = (bin_edges_z[:-1] + bin_edges_z[1:]) / 2.0
+
+    # p_x, cov_x = curve_fit(pdf_mix, bin_centers_x, counts_x)
+    # p_y, cov_y = curve_fit(pdf_mix, bin_centers_y, counts_y)
+    # p_z, cov_z = curve_fit(pdf_mix, bin_centers_z, counts_z)
+
+    # st.OnScreenAlert(f"p_x = {p_x}", "SPSGravityStatistics", st.Severity.Warning)
+    # st.OnScreenAlert(f"p_y = {p_y}", "SPSGravityStatistics", st.Severity.Warning)
+    # st.OnScreenAlert(f"p_z = {p_z}", "SPSGravityStatistics", st.Severity.Warning)
+
+if doAngVel:
+    T_unrotate: list[npt.NDArray] = []
+    T_planet: list[npt.NDArray] = []
+    q_planet: list[npt.NDArray] = []
+    for i in range(alignmentCutoff):
+        _T_planet = T_i_b_list[i]
+        # _T_unrotate = st.math.Quat_to_DCM(np.array([0.5, -0.5, 0.5, 0.5])) @ _T_planet
+        # _T_unrotate = _T_planet.T
+        _T_unrotate = _T_planet
+        # _T_unrotate = np.identity(3)
+        T_unrotate.append(_T_unrotate)
+        T_planet.append(_T_planet)
+
+        _q_planet = st.math.DCM_to_Quat(_T_planet)
+        if _q_planet[3] < 0.0:
+            for qq in range(4):
+                _q_planet[qq] = -_q_planet[qq]
+        q_planet.append(_q_planet)
+
+    quatEstimates = read_quats(attitudeEstDataPath)[:alignmentCutoff]
+    omega_est, omega_hist = estimate_omega_EnrightForm(quatEstimates, alignmentTimeStep_s, T_unrotate)
+    est = np.rad2deg(np.linalg.norm(omega_est))
+    exp = np.rad2deg(np.linalg.norm(angvel_i_b_list[0])) 
+
+    st.OnScreenLogMessage(f"Estimated omega (deg/s): {np.round(np.rad2deg(omega_est), 6)}", "SPSAngVelEstimate", st.Severity.Info)
+    st.OnScreenLogMessage(f"Expected omega (deg/s): {np.round(np.rad2deg(angvel_i_b_list[0]), 6)}", "SPSAngVelEstimate", st.Severity.Info)
+    st.OnScreenLogMessage(f"Estimated magnitude (deg/s): {est:.6f}", "SPSAngVelEstimate", st.Severity.Info)
+    st.OnScreenLogMessage(f"Expected magnitude (deg/s): {exp:.6f}", "SPSAngVelEstimate", st.Severity.Info)
 
 # exit(0)
 
@@ -863,6 +1068,34 @@ for j in range(len(times[alignmentCutoff:endpoint])):
     mx_minus, _ = st.ProcPlanet.SampleGround(planetData, mx_minus, radiusEquatorial, 0.0, 20)
     Pxx_minus = Pxx_plus + Pww
     
+    ########################################
+    ####    Cauchy Measurement Noise    ####
+    ########################################
+
+    # gk = np.zeros(3)
+    # Gk = np.identity(3)
+
+    # gamma = 100.0  # Allegedly the "standard deviation" but that's only for Gaussian
+    # Wk = Hx @ Pxx_minus @ Hx.T
+    # innovation = r_bestEstimate - Hx @ mx_minus
+
+    # st.OnScreenLogMessage(f"innovation = {innovation}", "SPSCauchyFilter", st.Severity.Info)
+    # st.OnScreenLogMessage(f"Wk = {np.diag(Wk)}", "SPSCauchyFilter", st.Severity.Info)
+
+    # for idx in range(3):
+    #     a = 0.5 * Wk[idx, idx]
+    #     sqrt_a = np.sqrt(a)
+    #     A = np.complex64(gamma / sqrt_a, innovation[idx] / sqrt_a)
+    #     phi = np.exp(0.25 * A * A) * special.erfc(0.5 * A)
+    #     gk_idx = 1.0 / (2.0 * sqrt_a) * np.imag(A * phi) / np.real(phi)
+    #     Gk_idx = gk_idx * gk_idx + np.real((0.5 * A * A + 1.0) * phi - A / np.sqrt(np.pi)) / (2.0 * a * np.real(phi))
+
+    #     gk[idx] = gk_idx if np.isfinite(gk_idx) else 0.0
+    #     Gk[idx] = Gk_idx if np.isfinite(Gk_idx) else 1.0
+
+    # st.OnScreenLogMessage(f"gk = {gk}", "SPSCauchyFilter", st.Severity.Info)
+    # st.OnScreenLogMessage(f"Gk = {np.diag(Gk)}", "SPSCauchyFilter", st.Severity.Info)
+    
     #############################
     ####    Filter Update    ####
     #############################
@@ -876,6 +1109,9 @@ for j in range(len(times[alignmentCutoff:endpoint])):
 
         mx_plus = mx_minus + gamma_underweight * K @ (r_bestEstimate - mz_minus)
         Pxx_plus = Pxx_minus - Pxz_minus @ K.T - K @ Pxz_minus.T + K @ Pzz_minus @ K.T
+
+        # mx_plus = mx_minus + Pxx_minus @ Hx.T @ gk
+        # Pxx_plus = Pxx_minus - Pxx_minus @ Hx.T @ Gk @ Hx @ Pxx_minus
     else:
         st.OnScreenLogMessage(f"Measurement at index {j} not processed; exceed 6-sigma distance to mean.", "SPSTraverse", st.Severity.Info)
         mx_plus = copy.deepcopy(mx_minus)
