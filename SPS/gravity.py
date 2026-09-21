@@ -2,6 +2,7 @@ from SPS.grav_earth_GGM05 import *
 from SPS.grav_moon_GRAIL150 import *
 from SPS.grav_mars_MRO110B2 import *
 from SPS.grav_phobos_basic import *
+from SPS.grav_vesta_DAWN import *
 from py_src.star.python.transformations import *
 
 import pyshtools as sh
