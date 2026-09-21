@@ -1,3 +1,10 @@
+from py_src.star.python.render import *
+from SPS.global_config import *
+
+from py_src.star_tracker.star_tracker import main
+from py_src.star_tracker.star_tracker.cam_matrix import *
+from py_src.star_tracker.star_tracker.array_transformations import *
+
 import numpy as np
 import numpy.typing as npt
 import copy
@@ -7,13 +14,7 @@ import datetime
 import psutil
 import matplotlib.pyplot as plt
 from pathlib import Path
-
-from py_src.star.python.render import *
-from SPS.global_config import *
-
-from star_tracker import main
-from star_tracker.cam_matrix import *
-from star_tracker.array_transformations import *
+import spiceypy as spice
 
 os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
 
@@ -535,6 +536,7 @@ if __name__ == "__main__":
         q_planet.append(Quaternion.FromMatrix(_T_planet).positivize())
         omega_exp.append(_omega_exp)
 
+    # Absolutely diabolical variable name for something that produces a list of quaternions
     angvelData = read_quats(filename)
     omega, omega_hist = estimate_omega(angvelData, dt, T_unrotate)
 
