@@ -266,14 +266,14 @@ delete_old: bool                = False
 reprocess_star_tracker: bool    = False
 globalDoPrint: bool             = True
 
-numImages: int = 500
+numImages: int = 200
 
 ##############################
 ####    INITIALIZATION    ####
 ##############################
 
 # site = "Vesta"
-site = "VestaTetrahedral"
+site = "VestaLongTerm"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
 int_seed = int(hash_object.hexdigest(), 16)
@@ -350,7 +350,8 @@ st.OnScreenLogMessage(f"t0 = {t0.as_utc_string()}", "SPSGPS", st.Severity.Info)
 
 time.sleep(0.1)
 
-timeStep_s: float = 100.0
+timeStep_s: float = 900.0
+propagationTimeStep_s = 60.0
 
 true_data: list[npt.NDArray] = []
 true_accelerations: list[npt.NDArray] = []
@@ -728,9 +729,9 @@ Slm_true = gravModel_true.Slm
 
 # Number of states:
 numClm: int = int(0.5 * (estDegree - 1) * (estDegree + 4))
-numSlm: int = int(0.5 * (estDegree - 1) * (estDegree + 4))
+numSlm: int = int(0.5 * (estDegree - 1) * (estDegree + 4) - (estDegree - 1))
 numSphericalHarmonicStates: int = numClm + numSlm
-numStates = 6 + 6 * numSPS + 1 + numSphericalHarmonicStates
+numStates: int = 6 + 6 * numSPS + numSphericalHarmonicStates
 numMeasurements: int = 7 * numSPS
 st.OnScreenLogMessage(f"Number of states       = {numStates}", "SPSGPS_KF_Initialization", st.Severity.Info)
 st.OnScreenLogMessage(f"Number of measurements = {numMeasurements}", "SPSGPS_KF_Initialization", st.Severity.Info)
@@ -740,13 +741,12 @@ idx_rsc_start: int          = 0
 idx_vsc_start: int          = 3
 idx_rSPS_start: list[int]   = [6 + 6 * ee for ee in range(numSPS)]
 idx_bSPS_start: list[int]   = [9 + 6 * ee for ee in range(numSPS)]
-idx_mu: int                 = 6 + 6 * numSPS
-idx_Clm_start: int          = idx_mu + 1
+idx_Clm_start: int          = 6 + 6 * numSPS
 idx_Slm_start: int          = idx_Clm_start + numClm
 
-idx_S20: int = idx_Slm_start
-idx_S30: int = idx_Slm_start + 3
-idx_S40: int = idx_Slm_start + 7
+# idx_S20: int = idx_Slm_start
+# idx_S30: int = idx_Slm_start + 3
+# idx_S40: int = idx_Slm_start + 7
 
 # Error 1-sigma magnitudes
 err_range_km: float         = 0.05
@@ -761,7 +761,10 @@ for ee in range(numSPS):
     mx_0 = np.concat((mx_0, 1e-3 * cameraTruePositions[ee], np.zeros(3)))
 
 # Gravitational parameters
-mx_0 = np.concat((mx_0, np.array([gravModel_true.mu * 1e-9]), np.zeros(numSphericalHarmonicStates)))
+mx_0 = np.concat((mx_0, np.zeros(numSphericalHarmonicStates)))
+
+# Set C[2,0] term to correct value to mitigate filter periodicity
+mx_0[idx_Clm_start] = gravModel_true.Clm[2, 0]
 
 # Covariance initialization for Kalman filter
 Pxx_0: npt.NDArray = np.zeros((numStates, numStates))
@@ -779,28 +782,22 @@ for ee in range(numSPS):
     Pxx_0[idx_rSPS_start[ee]:idx_bSPS_start[ee], 
           idx_rSPS_start[ee]:idx_bSPS_start[ee]] = np.diag(np.array([1.0, 1.0, 1.0])) * 1.0 ** 2
     if ee == numSPS - 1:
-        Pxx_0[idx_bSPS_start[ee]:idx_mu, 
-              idx_bSPS_start[ee]:idx_mu] = np.diag(np.array([1.0, 1.0, 1.0])) * 1.0 ** 2
+        Pxx_0[idx_bSPS_start[ee]:idx_Clm_start, 
+              idx_bSPS_start[ee]:idx_Clm_start] = np.diag(np.array([1.0, 1.0, 1.0])) * 1.0 ** 2
     else:
         Pxx_0[idx_bSPS_start[ee]:idx_rSPS_start[ee + 1], 
               idx_bSPS_start[ee]:idx_rSPS_start[ee + 1]] = np.diag(np.array([1.0, 1.0, 1.0])) * 1.0 ** 2
 
-# Gravitational parameter covariance
-Pxx_0[idx_mu, 
-      idx_mu] = 0.1 ** 2
-
 # Spherical harmonic coefficient covariance
 for sh in range(numSphericalHarmonicStates):
     Pxx_0[idx_Clm_start + sh, 
-          idx_Clm_start + sh] = 0.005 ** 2
+          idx_Clm_start + sh] = 0.002 ** 2
 
-# Override C[2,0]
+# Override C[2,0] covariance
 Pxx_0[idx_Clm_start, 
-      idx_Clm_start] = 0.05 ** 2
+      idx_Clm_start] = 0.0002 ** 2
 
 Pww: npt.NDArray = Pxx_0 * 0.1 ** 2
-# Override gravitational parameter process noise covariance
-Pww[idx_mu, idx_mu] = 0.0002 ** 2
 
 Pvv: npt.NDArray = np.zeros((numMeasurements, numMeasurements))
 for ee in range(numSPS):
@@ -817,23 +814,22 @@ mx_0 += np.linalg.cholesky(Pww) @ rng.normal(0.0, 1.0, numStates)
 # st.OnScreenLogMessage(f"mx_0 after Pww  = {mx_0}", "SPSGPS", st.Severity.Info)
 
 indices_lowerTriangular_Clm = np.tril_indices(estDegree + 1)
-indices_lowerTriangular_Slm = np.tril_indices(estDegree + 1)
+indices_lowerTriangular_Slm = np.tril_indices(estDegree)
 
 
 def SetCoeffsInGravityModel(x: npt.NDArray):
-    mu_new = x[idx_mu]
     Clm_linear = np.concat((np.zeros(3), x[idx_Clm_start:idx_Slm_start]))
-    Slm_linear = np.concat((np.zeros(3), x[idx_Slm_start:]))
+    # Slm_linear = np.concat((np.zeros(3), x[idx_Slm_start:]))
+    Slm_linear_noFirstColumn = np.concat((np.zeros(1), x[idx_Slm_start:]))
 
     Clm_new = np.zeros((estDegree + 1, estDegree + 1))
-    Slm_new = np.zeros((estDegree + 1, estDegree + 1))
+    Slm_new = np.zeros((estDegree, estDegree))
 
     Clm_new[indices_lowerTriangular_Clm] = Clm_linear
-    Slm_new[indices_lowerTriangular_Slm] = Slm_linear
+    Slm_new[indices_lowerTriangular_Slm] = Slm_linear_noFirstColumn
 
-    gravModel_est.mu = 1e9 * mu_new  # km^3/s^2 to m^3/s^2
     gravModel_est.Clm = Clm_new
-    gravModel_est.Slm = Slm_new
+    gravModel_est.Slm[1:estDegree + 1, 1:estDegree + 1] = Slm_new
 
 
 def HarmonicGravity(pos_pcpf: npt.NDArray):
@@ -895,7 +891,7 @@ def MeasurementModel(x: npt.NDArray):
         r_SPS = x[idx_rSPS_start[ee]:idx_bSPS_start[ee]]
         b_SPS = np.zeros(3)
         if ee == numSPS - 1:
-            b_SPS = x[idx_bSPS_start[ee]:idx_mu]
+            b_SPS = x[idx_bSPS_start[ee]:idx_Clm_start]
         else:
             b_SPS = x[idx_bSPS_start[ee]:idx_rSPS_start[ee + 1]]
 
@@ -958,9 +954,8 @@ SetCoeffsInGravityModel(mx_0)
 
 # Spacecraft propagation
 x_sc_true = np.concat((sc_pos, sc_vel))
-propagationTimeStep_s = 50.0
 
-times = times[:200]
+# times = times[:100]
 for j in range(len(times)):
 
     ######################################
@@ -1143,12 +1138,6 @@ for j in range(len(times)):
         mx_plus = copy.deepcopy(mx_minus)
         Pxx_plus = copy.deepcopy(Pxx_minus)
 
-    # Force all S[l,0] terms to be zero (necessary for spherical harmonics)
-    # TODO: HARDCODED INDICES AT THE MOMENT
-    mx_plus[idx_S20] = 0.0
-    mx_plus[idx_S30] = 0.0
-    mx_plus[idx_S40] = 0.0
-
     # Update the gravity model
     SetCoeffsInGravityModel(mx_plus)
     
@@ -1242,7 +1231,6 @@ for ee in range(numSPS):
                                                 idx_bSPS_start[ee]:idx_bSPS_start[ee] + 3]) for Pxx in Pxx_history]))
 
 # Gravitational parameters
-mx_mu = np.array([mx[idx_mu] for mx in mx_history])
 mx_Clm: list[npt.NDArray] = []
 mx_Slm: list[npt.NDArray] = []
 for ii in range(numClm):
@@ -1250,7 +1238,6 @@ for ii in range(numClm):
 for ii in range(numSlm):
     mx_Slm.append(np.array([mx[idx_Slm_start + ii] for mx in mx_history]))
 
-Pxx_mu = np.array([Pxx[idx_mu, idx_mu] for Pxx in Pxx_history])
 Pxx_Clm: list[npt.NDArray] = []
 Pxx_Slm: list[npt.NDArray] = []
 for ii in range(numClm):
@@ -1344,8 +1331,10 @@ for ii in range(len(SPS_bias_axes)):
 fig3 = plt.figure(layout='constrained')
 ax3 = fig3.add_subplot(111, projection='3d')
 
-ax3.plot(sc_true_r[:, 0], sc_true_r[:, 1], sc_true_r[:, 2], color='green', label='True Trajectory')
-ax3.plot(mx_sc_r[:, 0], mx_sc_r[:, 1], mx_sc_r[:, 2], color='red', label='Estimated Trajectory')
+ax3.plot(sc_true_r[:, 0], sc_true_r[:, 1], sc_true_r[:, 2], color=axisColors_main[1], label='True Trajectory')
+ax3.plot(mx_sc_r[:, 0], mx_sc_r[:, 1], mx_sc_r[:, 2], color=axisColors_main[0], label='Estimated Trajectory')
+ax3.scatter(sc_true_r[0, 0], sc_true_r[0, 1], sc_true_r[0, 2], color=sequenceColors_main[3], label='Start')
+ax3.scatter(sc_true_r[-1, 0], sc_true_r[-1, 1], sc_true_r[-1, 2], color=sequenceColors_main[-1], label='End')
 ax3.set_xlabel(axisNames[0] + "-Axis Position (m)")
 ax3.set_ylabel(axisNames[1] + "-Axis Position (m)")
 ax3.set_zlabel(axisNames[2] + "-Axis Position (m)")
@@ -1386,52 +1375,51 @@ set_axes_equal(ax3)
 
 # Gravitational parameter and select spherical harmonic coefficients
 fig4 = plt.figure(layout='constrained')
-ax4_1 = fig4.add_subplot(131)
-ax4_2 = fig4.add_subplot(132)
-ax4_3 = fig4.add_subplot(133)
-
-ax4_1.plot(times, mx_mu - 1e-9 * gravModel_true.mu, label=axName + "Gravitational Parameter Error", color='black')
-ax4_1.plot(times, -3.0 * np.sqrt(Pxx_mu), linestyle='dashed', color='dimgray', label=r"Gravitational Parameter 3$\sigma$ Intervals")
-ax4_1.plot(times, 3.0 * np.sqrt(Pxx_mu), linestyle='dashed', color='dimgray')
-ax4_1.set_xlabel("Time (s)")
-ax4_1.set_ylabel("Gravitational Parameter Error (km^3/s^2)")
-ax4_1.set_title("Error in Gravitational Parameter over Time")
-ax4_1.grid()
-ax4_1.legend()
+ax4_1 = fig4.add_subplot(121)
+ax4_2 = fig4.add_subplot(122)
 
 for ii in range(numClm):
     idx_l = indices_lowerTriangular_Clm[0][ii + 3]
     idx_m = indices_lowerTriangular_Clm[1][ii + 3]
     if ii == 0:
-        ax4_2.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii], label=r"Error in $C[l,m]$")
-        ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii], label=r"$C[l,m]$ 3$\sigma$ Intervals")
-        ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii], label=r"Error in $C[2,0]$")
+        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii], label=r"$C[2,0]$ 3$\sigma$ Intervals")
+        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
     else:
-        ax4_2.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii])
-        ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-        ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-ax4_2.set_xlabel("Time (s)")
-ax4_2.set_ylabel(r"Normalized, Non-Dimensional $C[l,m]$ Coefficients")
-ax4_2.set_title(r"Error in Normalized, Non-Dimensional $C[l,m]$ Coefficients over Time")
-ax4_2.grid()
-ax4_2.legend()
+        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii])
+        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+ax4_1.plot([], [], color='dimgray', alpha=0, label=r"Error in $C[l,m]$")
+ax4_1.plot([], [], color='dimgray', linestyle='dashed', alpha=0, label=r"$C[l,m]$ 3$\sigma$ Intervals")
+ax4_1.set_xlabel("Time (s)")
+ax4_1.set_ylabel(r"Normalized, Non-Dimensional $C[l,m]$ Coefficients")
+ax4_1.set_title(r"Error in Normalized, Non-Dimensional $C[l,m]$ Coefficients over Time")
+ax4_1.grid()
+ax4_1.legend()
 
 for ii in range(numSlm):
-    idx_l = indices_lowerTriangular_Slm[0][ii + 3]
-    idx_m = indices_lowerTriangular_Slm[1][ii + 3]
+    idx_l = indices_lowerTriangular_Slm[0][ii + 1] + 1
+    idx_m = indices_lowerTriangular_Slm[1][ii + 1] + 1
+    
     if ii == 0:
-        ax4_3.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii], label=r"Error in $S[l,m]$")
-        ax4_3.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii], label=r"$S[l,m]$ 3$\sigma$ Intervals")
-        ax4_3.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+        ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii], label=f"Error in S[{idx_l}, {idx_m}]")
+        ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii], label=f"S[{idx_l},{idx_m}] " + r"3$\sigma$ Intervals")
+        ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
     else:
-        ax4_3.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii])
-        ax4_3.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-        ax4_3.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-ax4_3.set_xlabel("Time (s)")
-ax4_3.set_ylabel(r"Normalized, Non-Dimensional $S[l,m]$ Coefficients")
-ax4_3.set_title(r"Error in Normalized, Non-Dimensional $S[l,m]$ Coefficients over Time")
-ax4_3.grid()
-ax4_3.legend()
+        ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii])
+        ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+        ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+
+    # ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii])
+    # ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+    # ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+ax4_2.plot([], [], color='dimgray', alpha=0, label=r"Error in $S[l,m]$")
+ax4_2.plot([], [], color='dimgray', linestyle='dashed', alpha=0, label=r"$S[l,m]$ 3$\sigma$ Intervals")
+ax4_2.set_xlabel("Time (s)")
+ax4_2.set_ylabel(r"Normalized, Non-Dimensional $S[l,m]$ Coefficients")
+ax4_2.set_title(r"Error in Normalized, Non-Dimensional $S[l,m]$ Coefficients over Time")
+ax4_2.grid()
+ax4_2.legend()
 
 
 plt.show()
