@@ -27,7 +27,9 @@ st.connect_to_sim(sys.argv)
 #################################################################
 
 thisRepo = os.path.join(str(st.path_utils.GetLocalAssetsDir()), "Repos", "SPS-Star-Tracker")
+localOutput = str(st.path_utils.GetLocalOutputDir())
 sys.path.append(thisRepo)
+sys.path.append(localOutput)
 
 from py_src.star_tracker.star_tracker import main
 from py_src.star_tracker.star_tracker.cam_matrix import *
@@ -48,6 +50,8 @@ import astropy.time as astrotime
 
 # from SPS.global_config import globalConfig
 from py_src.star.python.transformations import latlon_to_T, T_to_latlon, r_to_latlonalt, r_hat_to_ra_dec, normalize
+
+np.seterr(all='raise')
 
 
 def T1(angle: float) -> npt.NDArray:
@@ -125,6 +129,7 @@ def positivize_quat(q: npt.NDArray) -> npt.NDArray:
         return q
     else:
         return np.array([-q[0], -q[1], -q[2], -q[3]])
+
 
 def quat_mult(q1: npt.NDArray, q2: npt.NDArray):
     x = q1[0]
@@ -234,23 +239,26 @@ def estimate_omega_EnrightForm(quats: list[npt.NDArray], deltaT: float, T_unrota
     omega_sum = np.zeros(3)
     omega_history: list[npt.NDArray] = []
 
-    for i in range(1, N):
+    for i in range(1, N-1):
         # q_prev = st.math.DCM_to_Quat(st.math.Quat_to_DCM(normalize(quats[i - 1])) @ T_unrotate[i - 1])
         # q_curr = st.math.DCM_to_Quat(st.math.Quat_to_DCM(normalize(quats[i])) @ T_unrotate[i])
         q_prev = quats[i - 1]
         q_curr = quats[i]
+        q_next = quats[i + 1]
         # q_next = st.math.DCM_to_Quat(T_unrotate[i + 1] @ st.math.Quat_to_DCM(normalize(quats[i + 1])))
 
-        delta_q = quat_mult(q_curr, quat_inverse(q_prev))
-        angle: float = 2.0 * np.arccos(delta_q[3])
-        axis: npt.NDArray = delta_q[0:3] / np.sin(0.5 * angle)
+        delta_q = normalize(quat_mult(q_next, quat_inverse(q_prev)))
+        angle: float = 2.0 * np.arccos(np.clip(delta_q[3], -1.0, 1.0))
+        axis: npt.NDArray = np.zeros(3)
+        if angle != 0.0:
+            axis: npt.NDArray = delta_q[0:3] / np.sin(0.5 * angle)
 
         # q_unrotate_prev = st.math.DCM_to_Quat(T_unrotate[i - 1])
         # q_unrotate_curr = st.math.DCM_to_Quat(T_unrotate[i])
         # T_unrotate_avg = st.math.Quat_to_DCM(normalize(0.5 * (q_unrotate_prev + q_unrotate_curr)))
         # omega_i = T_unrotate_avg @ (angle * axis / deltaT)
 
-        omega_i = T_unrotate[i] @ (-angle * axis / deltaT)
+        omega_i = T_unrotate[i] @ (-angle * axis / (2.0 * deltaT))
 
         # omega_i = angle * axis / deltaT
         omega_history.append(omega_i)
@@ -309,8 +317,8 @@ np.set_printoptions(suppress=True)
 #################################
 
 regenerateStarCatalog: bool     = False  # DO NOT USE THIS; CURRENTLY BROKEN
-delete_old: bool                = True
-reprocess_star_tracker: bool    = True
+delete_old: bool                = False
+reprocess_star_tracker: bool    = False
 doAlignment: bool               = True
 doAngVel: bool                  = True
 globalDoPrint: bool             = True
@@ -328,8 +336,8 @@ numImages: int = alignmentCutoff + 200
 # site: str = "Apollo11"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
-site: str = "ConnectingRidge"
-# site: str = "NobileRim1"
+# site: str = "ConnectingRidge"
+site: str = "NobileRim1"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
 int_seed = int(hash_object.hexdigest(), 16)
@@ -386,8 +394,8 @@ planetName: str = planetEntity.getName()
 
 cameraEntity: st.Entity = st.GetThisSystem().GetParam(st.VarType.entityRef, "Camera")
 
-renderDirLocal = os.path.join("Local", "Repos", "SPS-Star-Tracker", "output", planetName, site, "Renders")
-outputDir = os.path.join(thisRepo, "output", planetName, site)
+renderDirLocal = os.path.join("Local", "..", "Output", planetName, site, "Renders")
+outputDir = os.path.join(localOutput, planetName, site)
 renderDir = os.path.join(outputDir, "Renders")
 
 truthDataPath = os.path.join(outputDir, "truth_data_" + planetName + ".csv")
@@ -877,7 +885,7 @@ for i in range(len(times)):
 ####    SPS ALIGNMENT    ####
 ###############################
 
-eps: float = 1.0e-6
+eps: float = 1.0e-4
 T_alignment = np.identity(3)
 if doAlignment:
     # phi_pc, lon_pc, _ = r_to_latlonalt(cameraPosPlanetFixed, radiusEquatorial)
@@ -917,15 +925,17 @@ if doAlignment:
     # st.OnScreenAlert(f"p_z = {p_z}", "SPSGravityStatistics", st.Severity.Warning)
 
 if doAngVel:
+    st.OnScreenAlert(f"Made it to ang vel processing!", "SPS", st.Severity.Warning)
+
     T_unrotate: list[npt.NDArray] = []
     T_planet: list[npt.NDArray] = []
     q_planet: list[npt.NDArray] = []
+    
+    quatEstimates = read_quats(attitudeEstDataPath)[:alignmentCutoff]
     for i in range(alignmentCutoff):
         _T_planet = T_i_b_list[i]
-        # _T_unrotate = st.math.Quat_to_DCM(np.array([0.5, -0.5, 0.5, 0.5])) @ _T_planet
-        # _T_unrotate = _T_planet.T
-        _T_unrotate = _T_planet
-        # _T_unrotate = np.identity(3)
+        _T_i_c = st.math.Quat_to_DCM(normalize(quatEstimates[i]))
+        _T_unrotate = _T_planet @ _T_i_c.T
         T_unrotate.append(_T_unrotate)
         T_planet.append(_T_planet)
 
@@ -934,9 +944,284 @@ if doAngVel:
             for qq in range(4):
                 _q_planet[qq] = -_q_planet[qq]
         q_planet.append(_q_planet)
+        
+    st.OnScreenAlert(f"Made it to ang vel bulk estimation!", "SPS", st.Severity.Warning)
 
-    quatEstimates = read_quats(attitudeEstDataPath)[:alignmentCutoff]
     omega_est, omega_hist = estimate_omega_EnrightForm(quatEstimates, alignmentTimeStep_s, T_unrotate)
+
+    ###### UKF
+    st.OnScreenAlert(f"Made it to start of UKF init!", "SPS", st.Severity.Warning)
+
+    numStates = 6
+    numMeasurements = 3
+
+    # Start from index 1, go to N - 1
+    start_idx = 1
+    end_idx = len(quatEstimates) - 1  # Non-inclusive
+    mx_0: npt.NDArray = np.concat((st.math.DCM_to_MRP(T_planet[start_idx]).ToVector(), angvel_i_b_list[start_idx]))
+    x_true = copy.deepcopy(mx_0)
+
+    Pxx_0: npt.NDArray = np.identity(6)
+    Pxx_0[0:3, 0:3] = np.identity(3) * 1e-2 ** 2
+    Pxx_0[3:6, 3:6] = np.identity(3) * 1e-5 ** 2
+
+    Pww: npt.NDArray = Pxx_0 * 0.1 ** 2
+    Pvv: npt.NDArray = np.identity(numMeasurements) * 4e-5 ** 2
+
+    mx_0 += np.linalg.cholesky(Pww) @ rng.normal(0.0, 1.0, numStates)
+
+    def Skew(vec: npt.NDArray):
+        return np.array([[0.0, -vec[2], vec[1]],
+                        [vec[2], 0.0, -vec[0]],
+                        [-vec[1], vec[0], 0.0]])
+
+
+    def MRPDynamics(mrp: npt.NDArray, angVel: npt.NDArray) -> npt.NDArray:
+        return 0.5 * (0.5 * (1.0 - np.dot(mrp, mrp)) * np.identity(3) - Skew(mrp) + np.outer(mrp, mrp)) @ angVel
+
+
+    def EquationsOfMotion(t: float, x: npt.NDArray):
+        x_dot = np.zeros(len(x))
+        x_dot[0:3] = MRPDynamics(x[0:3], x[3:6])
+        return x_dot
+
+    
+    def IntegrateRK4(eom_func, t_span: tuple[float, float], x: npt.NDArray, t_step: float):
+        out_x = copy.deepcopy(x)
+        t_curr = t_span[0]
+        while t_curr < t_span[1]:
+            dt = min(t_step, t_span[1] - t_curr)
+            k1 = eom_func(t_curr, out_x)
+            k2 = eom_func(t_curr + 0.5 * dt, out_x + 0.5 * k1 * dt)
+            k3 = eom_func(t_curr + 0.5 * dt, out_x + 0.5 * k2 * dt)
+            k4 = eom_func(t_curr + dt, out_x + k3 * dt)
+            out_x += (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+            t_curr += dt
+        return out_x
+
+
+    def MeasurementModel(x: npt.NDArray, T_i_c: npt.NDArray):
+        sigma_p_i = x[0:3]
+        omega_p_i = x[3:6]
+        z_exp = T_i_c @ st.math.MRP_to_DCM(st.math.ModifiedRodriguesParameters(sigma_p_i)).T @ omega_p_i
+        return z_exp
+
+
+    mx_plus = copy.deepcopy(mx_0)
+    Pxx_plus = copy.deepcopy(Pxx_0)
+
+    x_true_history: list[npt.NDArray] = []
+    z_history: list[npt.NDArray] = []
+    mx_history: list[npt.NDArray] = []
+    Pxx_history: list[npt.NDArray] = []
+
+    # UKF params
+    alpha_ukf: float = 1.0
+    beta_ukf: float = 2.0
+    kappa_ukf: float = max(3.0 - numStates, 0.0)
+    lam_ukf: float = alpha_ukf * alpha_ukf * (numStates + kappa_ukf) - numStates
+    
+    alpha_underweight = 1.0
+    gamma_underweight = 1.0
+
+    w0_m = lam_ukf / (lam_ukf + numStates)
+    wi_m = 1.0 / (2.0 * (lam_ukf + numStates))
+    w0_c = lam_ukf / (lam_ukf + numStates) + (1.0 - alpha_ukf * alpha_ukf + beta_ukf)
+    wi_c = 1.0 / (2.0 * (lam_ukf + numStates))
+    sqrt_n_lam = np.sqrt(numStates + lam_ukf)
+
+    st.OnScreenAlert(f"Made it to start of UKF loop!", "SPS", st.Severity.Warning)
+
+    for j in range(start_idx + 1, end_idx - 1):
+        ######################################
+        ####    Measurement Processing    ####
+        ######################################
+
+        T_i_c: npt.NDArray = st.math.Quat_to_DCM(normalize(quatEstimates[j]))
+        
+        doPrint: bool = j % printInterval == 0
+
+        ########################################
+        ####    Save States for Plotting    ####
+        ########################################
+
+        if np.linalg.norm(mx_plus[0:3]) >= 1.0:
+            mx_plus[0:3] = st.math.ModifiedRodriguesParameters(mx_plus[0:3]).shadow().ToVector()
+        if np.linalg.norm(x_true[0:3]) >= 1.0:
+            x_true[0:3] = st.math.ModifiedRodriguesParameters(x_true[0:3]).shadow().ToVector()
+
+        st.OnScreenLogMessage(f"MRP     = {mx_plus[0:3]}", "SPS", st.Severity.Info)
+        # st.OnScreenLogMessage(f"Ang Vel = {mx_plus[3:6]}", "SPS", st.Severity.Info)
+        # st.OnScreenLogMessage(f"T_i_c   = {quatEstimates[j]}", "SPS", st.Severity.Info)
+
+        x_true_history.append(copy.deepcopy(x_true))
+        mx_history.append(copy.deepcopy(mx_plus))
+        Pxx_history.append(copy.deepcopy(Pxx_plus))
+
+        #################################
+        ####    Truth Propagation    ####
+        #################################
+
+        x_true = IntegrateRK4(EquationsOfMotion, (0.0, alignmentTimeStep_s), x_true, alignmentTimeStep_s)
+    
+        ##################################
+        ####    Filter Propagation    ####
+        ##################################
+
+        # st.OnScreenLogMessage(f'Filter iteration {j}', "SPS", st.Severity.Info)
+
+        # Sigma points:
+        # SetCoeffsInGravityModel(mx_plus)
+        chi_0 = IntegrateRK4(EquationsOfMotion, (0.0, alignmentTimeStep_s), mx_plus, alignmentTimeStep_s)
+        mx_minus: npt.NDArray = w0_m * chi_0
+        Sxx_plus = np.linalg.cholesky(Pxx_plus)
+        chi_list_prop_1 = []
+        chi_list_prop_2 = []
+        for ii in range(numStates):
+            chi_ii_1 = mx_plus + sqrt_n_lam * Sxx_plus[:, ii]
+            chi_ii_2 = mx_plus - sqrt_n_lam * Sxx_plus[:, ii]
+            chi_ii_1_prop = IntegrateRK4(EquationsOfMotion, (0.0, alignmentTimeStep_s), chi_ii_1, alignmentTimeStep_s)
+            chi_ii_2_prop = IntegrateRK4(EquationsOfMotion, (0.0, alignmentTimeStep_s), chi_ii_2, alignmentTimeStep_s)
+
+            chi_list_prop_1.append(chi_ii_1_prop)
+            chi_list_prop_2.append(chi_ii_2_prop)
+            mx_minus += wi_m * chi_ii_1_prop
+            mx_minus += wi_m * chi_ii_2_prop
+
+        Pxx_minus = w0_c * np.outer(mx_plus - mx_minus, mx_plus - mx_minus)
+        for ii in range(numStates):
+            chi_ii_1 = chi_list_prop_1[ii]
+            chi_ii_2 = chi_list_prop_2[ii]
+            Pxx_minus += wi_c * np.outer(chi_ii_1 - mx_minus, chi_ii_1 - mx_minus)
+            Pxx_minus += wi_c * np.outer(chi_ii_2 - mx_minus, chi_ii_2 - mx_minus)
+        Pxx_minus += Pww
+
+        #############################
+        ####    Filter Update    ####
+        #############################
+
+        # Sigma points and mz_minus
+        Sxx_minus = np.linalg.cholesky(Pxx_minus)
+        mz_minus: npt.NDArray = MeasurementModel(mx_minus, T_i_c)
+        chi_list_minus = [copy.deepcopy(mx_minus)]
+        z_hx_list = [copy.deepcopy(mz_minus)]
+        mz_minus = w0_m * mz_minus
+        for ii in range(numStates):
+            chi_ii_1 = mx_minus + sqrt_n_lam * Sxx_minus[:, ii]
+            chi_ii_2 = mx_minus - sqrt_n_lam * Sxx_minus[:, ii]
+            chi_list_minus.append(chi_ii_1)
+            chi_list_minus.append(chi_ii_2)
+
+            z_hx_ii_1 = MeasurementModel(chi_ii_1, T_i_c)
+            z_hx_ii_2 = MeasurementModel(chi_ii_2, T_i_c)
+            mz_minus += wi_m * z_hx_ii_1
+            mz_minus += wi_m * z_hx_ii_2
+            z_hx_list.append(z_hx_ii_1)
+            z_hx_list.append(z_hx_ii_2)
+
+        # Pxz and Pzz
+        Pxz_minus = w0_c * np.outer(chi_list_minus[0] - mx_minus, z_hx_list[0] - mz_minus)
+        Pzz_minus = w0_c * np.outer(z_hx_list[0] - mz_minus, z_hx_list[0] - mz_minus)
+        for ii in range(1, len(chi_list_minus)):
+            Pxz_minus += wi_c * np.outer(chi_list_minus[ii] - mx_minus, z_hx_list[ii] - mz_minus)
+            Pzz_minus += wi_c * np.outer(z_hx_list[ii] - mz_minus, z_hx_list[ii] - mz_minus)
+        Pzz_minus += alpha_underweight * Pvv
+
+        # Kalman gain
+        K = Pxz_minus @ np.linalg.inv(Pzz_minus)
+
+        z_new = omega_hist[j - 1]
+        z_history.append(copy.deepcopy(z_new))
+
+        mx_plus_candidate = mx_minus + gamma_underweight * K @ (z_new - mz_minus)
+        Pxx_plus_candidate = Pxx_minus - Pxz_minus @ K.T - K @ Pxz_minus.T + K @ Pzz_minus @ K.T
+        if True:
+        # if (np.abs(mx_plus_candidate - mx_minus) < 6.0 * np.sqrt(np.diag(Pxx_minus))).all():
+            mx_plus = copy.deepcopy(mx_plus_candidate)
+            Pxx_plus = copy.deepcopy(Pxx_plus_candidate)
+        
+    # st.OnScreenLogMessage(f"Angular velocity filter finished without crashing!", "SPS", st.Severity.Info)
+
+    ########################
+    ####    PLOTTING    ####
+    ########################
+
+    ###########################
+    ####    Color Setup    ####
+    ###########################
+
+    axisColors_main = ["#CC4444", 
+                       "#33BB33", 
+                       "#2266FF"]
+
+    axisColors_dark = ["#551111",
+                       "#115511",
+                       "#113388"]
+
+    ##########################
+    ####    Name Setup    ####
+    ##########################
+
+    axisNames = [r"$x$", r"$y$", r"$z$"]
+
+    ###########################################
+    ####    Plot Information Extraction    ####
+    ###########################################
+
+    # Planet attitude
+    mx_sigma = np.array([mx[0:3] for mx in mx_history])
+    Pxx_sigma = np.array([np.diag(Pxx[0:3, 0:3]) for Pxx in Pxx_history])
+    truth_sigma = np.array([st.math.DCM_to_MRP(T_i_b).ToVector() for T_i_b in T_i_b_list])
+    for ii in range(len(truth_sigma)):
+        if np.linalg.norm(truth_sigma[ii]) >= 1.0:
+            truth_sigma[ii] = st.math.ModifiedRodriguesParameters(truth_sigma[ii]).shadow().ToVector()
+
+    # Planet angular velocity
+    mx_angVel = np.array([mx[3:6] for mx in mx_history])
+    Pxx_angVel = np.array([np.diag(Pxx[3:6, 3:6]) for Pxx in Pxx_history])
+
+    # Angular velocity
+    fig5 = plt.figure(layout='constrained')
+    ax5_1 = fig5.add_subplot(231)
+    ax5_2 = fig5.add_subplot(232)
+    ax5_3 = fig5.add_subplot(233)
+    ax5_4 = fig5.add_subplot(234)
+    ax5_5 = fig5.add_subplot(235)
+    ax5_6 = fig5.add_subplot(236)
+
+    sigma_axes = [ax5_1, ax5_2, ax5_3]
+    angVel_axes = [ax5_4, ax5_5, ax5_6]
+
+    for i in range(len(sigma_axes)):
+        ax = sigma_axes[i]
+        axName = axisNames[i]
+        ax.plot(times[2:alignmentCutoff - 2], mx_sigma[:, i] - truth_sigma[2:alignmentCutoff - 2, i], label=axName + "-Axis MRP", color=axisColors_main[i])
+        ax.plot(times[2:alignmentCutoff - 2], -3.0 * np.sqrt(Pxx_sigma[:, i]), linestyle='dashed', color=axisColors_dark[i], label=axName + r"-Axis MRP 3$\sigma$ Interval")
+        ax.plot(times[2:alignmentCutoff - 2], 3.0 * np.sqrt(Pxx_sigma[:, i]), linestyle='dashed', color=axisColors_dark[i])
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("MRP error (unitless)")
+        ax.set_title("Error in " + axName + "-Axis MRP over Time")
+        ax.grid()
+        ax.legend(loc='upper right')
+
+    for i in range(len(angVel_axes)):
+        ax = angVel_axes[i]
+        axName = axisNames[i]
+        ax.plot(times[2:alignmentCutoff - 2], mx_angVel[:, i] - np.asarray(angvel_i_b_list)[2:alignmentCutoff - 2, i], label=axName + "-Axis Angular Velocity", color=axisColors_main[i])
+        ax.plot(times[2:alignmentCutoff - 2], -3.0 * np.sqrt(Pxx_angVel[:, i]), linestyle='dashed', color=axisColors_dark[i], label=axName + r"-Axis Angular Velocity 3$\sigma$ Interval")
+        ax.plot(times[2:alignmentCutoff - 2], 3.0 * np.sqrt(Pxx_angVel[:, i]), linestyle='dashed', color=axisColors_dark[i])
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Angular Velocity error (rad/s)")
+        ax.set_title("Error in " + axName + "-Axis Angular Velocity over Time")
+        ax.grid()
+        ax.legend(loc='upper right')
+
+    plt.show()
+
+    #############################################
+    ####    Raw Angular Velocity Estimate    ####
+    #############################################
+
     est = np.rad2deg(np.linalg.norm(omega_est))
     exp = np.rad2deg(np.linalg.norm(angvel_i_b_list[0])) 
 
