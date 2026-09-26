@@ -42,6 +42,7 @@ from SPS.grav_vesta_DAWN import grav_vesta_DAWN, grav_base
 import copy
 import psutil
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from pathlib import Path
 import hashlib
 
@@ -265,8 +266,17 @@ np.set_printoptions(suppress=True)
 delete_old: bool                = False
 reprocess_star_tracker: bool    = False
 globalDoPrint: bool             = True
+incrementalRendering: bool      = False
 
-numImages: int = 200
+# Warning: setting Incremental Rendering to "True" this carries the assumption that the only change between 
+# runs was increasing the number of images. All previously-rendered images will be kept as is, carrying with
+# them all baked-in assumptions about the times and locations at which they were captured. Unfortunately, it
+# is necessary to reprocess all star tracker measurements in this case.
+if incrementalRendering:
+    delete_old = False
+    reprocess_star_tracker = True
+
+numImages: int = 400
 
 ##############################
 ####    INITIALIZATION    ####
@@ -390,7 +400,7 @@ for ee in range(numSPS):
     if not os.path.exists(renderDirs[ee]):
         Path(renderDirs[ee]).mkdir(parents=True)
 
-    if is_dir_empty(renderDirs[ee]):
+    if is_dir_empty(renderDirs[ee]) or incrementalRendering:
         # locs: list[npt.NDArray] = []
         # vels: list[npt.NDArray] = []
         # rots: list[npt.NDArray] = []
@@ -400,7 +410,20 @@ for ee in range(numSPS):
         tNow: datetime.datetime = t0.as_datetime()
         st.SimGlobals.SimClock.ResetTo(st.timestamp.from_datetime(tNow))
         for i in range(numImages):
+            renderName = "SPSRender" + str(i).zfill(5)
             doPrint: bool = i % printInterval == 0 and globalDoPrint
+
+            if os.path.isfile(os.path.join(renderDirs[ee], renderName + ".png")):
+                if doPrint:
+                    st.OnScreenLogMessage(f"Incremental Rendering: skipped existing image {renderName}", "SPSGPS", st.Severity.Info)
+
+                # Step time forward by the correct dt
+                tNow += datetime.timedelta(seconds=timeStep_s)
+                
+                st.SimGlobals.SimClock.ResetTo(st.timestamp.from_datetime(tNow))
+                time.sleep(0.1)
+
+                continue
 
             # Sample gravity vector
             stateNow = st.frames.FramedLocVelAcc(st.frames.rva_struct(cameraTruePositions[ee], np.zeros(3), np.zeros(3)), planetFixedFrame)
@@ -462,7 +485,7 @@ for ee in range(numSPS):
             EridaniRenderPayload.AddParam(st.VarType.doubleV3, "Vel", vel_framed.vel_WRT_ExprIn(J2000Frame))
             EridaniRenderPayload.AddParam(st.VarType.doubleV4, "Rot", q_I_S_true_passive)
             EridaniRenderPayload.AddParam(st.VarType.entityRef, "Frame", J2000)
-            EridaniRenderPayload.AddParam(st.VarType.string, "NameOverride", "SPSRender" + str(i).zfill(5))
+            EridaniRenderPayload.AddParam(st.VarType.string, "NameOverride", renderName)
             EridaniRenderPayload.AddParam(st.VarType.string, "OutputPathOverride", str(renderDirsLocal[ee]))
             payload = st.SimGlobals.Request("EridaniSingleRender", EridaniRenderPayload, timeout=datetime.timedelta(seconds=60.0))
 
@@ -703,6 +726,9 @@ st.OnScreenLogMessage(f"sc_vel = {sc_vel}", "SPSGPS", st.Severity.Info)
 estDegree: int = 4  # = estOrder, keep them the same for simplicity
 gravModel_true: grav_base = grav_vesta_DAWN()
 gravModel_est: grav_base = grav_vesta_DAWN()
+gravModel_est.Clm = np.zeros((estDegree + 1, estDegree + 1))
+gravModel_est.Slm = np.zeros((estDegree + 1, estDegree + 1))
+
 trueGravSampler = GravSampler(gravModel_true, 20, 20)
 customGravSampler = GravSampler(gravModel_est, estDegree, estDegree)
 
@@ -722,9 +748,8 @@ Slm_true = gravModel_true.Slm
 #         rSPS2(3), bSPS2(3),       Indexing: 12:18     Inclusive indices: [12, 17]
 #         rSPS3(3), bSPS3(3),       Indexing: 18:24     Inclusive indices: [18, 23]
 #         rSPS4(3), bSPS4(3),       Indexing: 24:30     Inclusive indices: [24, 29]
-#         mu,                       Indexing: 30        Inclusive indices: [30    ]
-#         C(2,0), ..., C(4,4),      Indexing: 31:43     Inclusive indices: [31, 42]
-#         S(2,0), ..., S(4,4)]      Indexing: 43:55     Inclusive indices: [43, 54]
+#         C(2,0), ..., C(4,4),      Indexing: 30:42     Inclusive indices: [30, 41]
+#         S(2,1), ..., S(4,4)]      Indexing: 42:51     Inclusive indices: [42, 50]
 #################################################################################################
 
 # Number of states:
@@ -749,9 +774,9 @@ idx_Slm_start: int          = idx_Clm_start + numClm
 # idx_S40: int = idx_Slm_start + 7
 
 # Error 1-sigma magnitudes
-err_range_km: float         = 0.05
-err_rangeRate_km_s: float   = 0.002
-err_angle_rad: float        = 0.001
+err_range_km: float         = 0.01
+err_rangeRate_km_s: float   = 0.0005
+err_angle_rad: float        = 0.0001
 
 # Spacecraft position and velocity
 mx_0: npt.NDArray = np.concat((1e-3 * sc_pos, 1e-3 * sc_vel))
@@ -771,11 +796,11 @@ Pxx_0: npt.NDArray = np.zeros((numStates, numStates))
 
 # Spacecraft position covariance
 Pxx_0[idx_rsc_start:idx_vsc_start, 
-      idx_rsc_start:idx_vsc_start] = np.identity(3) * 1.0 ** 2  # m
+      idx_rsc_start:idx_vsc_start] = np.identity(3) * 1.0 ** 2  # km
 
 # Spacecraft velocity covariance
 Pxx_0[idx_vsc_start:idx_rSPS_start[0], 
-      idx_vsc_start:idx_rSPS_start[0]] = np.identity(3) * 0.01 ** 2  # m/s
+      idx_vsc_start:idx_rSPS_start[0]] = np.identity(3) * 0.01 ** 2  # km/s
 
 # SPS position covariance
 for ee in range(numSPS):
@@ -803,10 +828,10 @@ Pvv: npt.NDArray = np.zeros((numMeasurements, numMeasurements))
 for ee in range(numSPS):
     posIndex: int = 7 * ee
     Pvv[posIndex:posIndex + 3, posIndex:posIndex + 3] = np.diag(np.ones(3)) * 1.0 ** 2
-    Pvv[posIndex + 3, posIndex + 3] = err_range_km ** 2
-    Pvv[posIndex + 4, posIndex + 4] = err_rangeRate_km_s ** 2
-    Pvv[posIndex + 5, posIndex + 5] = err_angle_rad ** 2
-    Pvv[posIndex + 6, posIndex + 6] = err_angle_rad ** 2
+    Pvv[posIndex + 3, posIndex + 3] = (3.0 * err_range_km) ** 2
+    Pvv[posIndex + 4, posIndex + 4] = (3.0 * err_rangeRate_km_s) ** 2
+    Pvv[posIndex + 5, posIndex + 5] = (3.0 * err_angle_rad) ** 2
+    Pvv[posIndex + 6, posIndex + 6] = (3.0 * err_angle_rad) ** 2
 
 # Add a bit of scatter to initial mean based on Pww
 # st.OnScreenLogMessage(f"mx_0 before Pww = {mx_0}", "SPSGPS", st.Severity.Info)
@@ -955,7 +980,7 @@ SetCoeffsInGravityModel(mx_0)
 # Spacecraft propagation
 x_sc_true = np.concat((sc_pos, sc_vel))
 
-# times = times[:100]
+# times = times[:50]
 for j in range(len(times)):
 
     ######################################
@@ -1381,45 +1406,55 @@ ax4_2 = fig4.add_subplot(122)
 for ii in range(numClm):
     idx_l = indices_lowerTriangular_Clm[0][ii + 3]
     idx_m = indices_lowerTriangular_Clm[1][ii + 3]
+
+    mx_Clm_percentError = 100.0 * (mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m]) / gravModel_true.Clm[idx_l, idx_m]
+    Pxx_Clm_percentError = 100.0 * np.sqrt(Pxx_Clm[ii]) / np.abs(gravModel_true.Clm[idx_l, idx_m])
+
     if ii == 0:
-        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii], label=r"Error in $C[2,0]$")
-        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii], label=r"$C[2,0]$ 3$\sigma$ Intervals")
-        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
+        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)], label=r"Error in $C[2,0]$")
+        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)], label=r"$C[2,0]$ 3$\sigma$ Intervals")
+        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
     else:
-        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii])
-        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-ax4_1.plot([], [], color='dimgray', alpha=0, label=r"Error in $C[l,m]$")
-ax4_1.plot([], [], color='dimgray', linestyle='dashed', alpha=0, label=r"$C[l,m]$ 3$\sigma$ Intervals")
+        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)])
+        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+
+customHandles_Clm = [
+    Line2D([0], [0], color="dimgray", label=r"Percent Error in $C[l,m]$"),
+    Line2D([0], [0], color="dimgray", ls="--", label=r"$C[l,m]$ 3$\sigma$ Intervals (Percent Error)")
+]
+currentHandles, currentLabels = ax4_1.get_legend_handles_labels()
+allHandles = currentHandles + customHandles_Clm
+
 ax4_1.set_xlabel("Time (s)")
 ax4_1.set_ylabel(r"Normalized, Non-Dimensional $C[l,m]$ Coefficients")
-ax4_1.set_title(r"Error in Normalized, Non-Dimensional $C[l,m]$ Coefficients over Time")
+ax4_1.set_title(r"Percent Error in Normalized, Non-Dimensional $C[l,m]$ Coefficients over Time")
 ax4_1.grid()
-ax4_1.legend()
+ax4_1.legend(handles=allHandles)
 
 for ii in range(numSlm):
     idx_l = indices_lowerTriangular_Slm[0][ii + 1] + 1
     idx_m = indices_lowerTriangular_Slm[1][ii + 1] + 1
-    
-    if ii == 0:
-        ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii], label=f"Error in S[{idx_l}, {idx_m}]")
-        ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii], label=f"S[{idx_l},{idx_m}] " + r"3$\sigma$ Intervals")
-        ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-    else:
-        ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii])
-        ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-        ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
 
-    # ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii])
-    # ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-    # ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii])
-ax4_2.plot([], [], color='dimgray', alpha=0, label=r"Error in $S[l,m]$")
-ax4_2.plot([], [], color='dimgray', linestyle='dashed', alpha=0, label=r"$S[l,m]$ 3$\sigma$ Intervals")
+    mx_Slm_percentError = 100.0 * (mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m]) / gravModel_true.Slm[idx_l, idx_m]
+    Pxx_Slm_percentError = 100.0 * np.sqrt(Pxx_Slm[ii]) / np.abs(gravModel_true.Slm[idx_l, idx_m])
+    
+    ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)])
+    ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+    ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+
+customHandles_Slm = [
+    Line2D([0], [0], color="dimgray", label=r"Percent Error in $S[l,m]$"),
+    Line2D([0], [0], color="dimgray", ls="--", label=r"$S[l,m]$ 3$\sigma$ Intervals (Percent Error)")
+]
+currentHandles, currentLabels = ax4_2.get_legend_handles_labels()
+allHandles = currentHandles + customHandles_Slm
+
 ax4_2.set_xlabel("Time (s)")
 ax4_2.set_ylabel(r"Normalized, Non-Dimensional $S[l,m]$ Coefficients")
-ax4_2.set_title(r"Error in Normalized, Non-Dimensional $S[l,m]$ Coefficients over Time")
+ax4_2.set_title(r"Percent Error in Normalized, Non-Dimensional $S[l,m]$ Coefficients over Time")
 ax4_2.grid()
-ax4_2.legend()
+ax4_2.legend(handles=allHandles)
 
 
 plt.show()
