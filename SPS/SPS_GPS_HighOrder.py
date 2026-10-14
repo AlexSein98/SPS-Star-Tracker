@@ -369,6 +369,7 @@ measured_accelerations: list[npt.NDArray] = []
 q_i_b_data: list[npt.NDArray] = []
 
 times = timeStep_s * np.linspace(0.0, numImages - 1, numImages)
+times_days: npt.NDArray = times / 86400.0
 
 # mu: float = 1e9 * planetEntity.GetParam(st.VarType.double, ["Dynamics", "GravitationalParameter_km3_s2"])
 radiusEquatorial: float = planetEntity.GetParam(st.VarType.double, ["#Planet", "General", "Radius_m"])
@@ -431,7 +432,7 @@ for ee in range(numSPS):
 
             g_thirdBody = st.SimGlobals.SampleVectorField("ThirdBodyGravity", stateNow).ExprIn(planetFixedFrame)
             g_thirdBody -= st.SimGlobals.SampleVectorField("ThirdBodyGravity", planetStateDummy).ExprIn(planetFixedFrame)
-            st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSGPS", st.Severity.Info)
+            # st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSGPS", st.Severity.Info)
 
             g += g_thirdBody - np.cross(Omega, np.cross(Omega, cameraTruePositions[ee]))
             g_true = copy.deepcopy(g)
@@ -816,22 +817,25 @@ for ee in range(numSPS):
 # Spherical harmonic coefficient covariance
 for sh in range(numSphericalHarmonicStates):
     Pxx_0[idx_Clm_start + sh, 
-          idx_Clm_start + sh] = 0.002 ** 2
+          idx_Clm_start + sh] = 0.005 ** 2
 
 # Override C[2,0] covariance
 Pxx_0[idx_Clm_start, 
       idx_Clm_start] = 0.0002 ** 2
 
 Pww: npt.NDArray = Pxx_0 * 0.1 ** 2
+# for sh in range(numSphericalHarmonicStates):
+#     Pww[idx_Clm_start + sh, 
+#         idx_Clm_start + sh] = 0.000001 ** 2
 
 Pvv: npt.NDArray = np.zeros((numMeasurements, numMeasurements))
 for ee in range(numSPS):
     posIndex: int = 7 * ee
     Pvv[posIndex:posIndex + 3, posIndex:posIndex + 3] = np.diag(np.ones(3)) * 1.0 ** 2
-    Pvv[posIndex + 3, posIndex + 3] = (3.0 * err_range_km) ** 2
-    Pvv[posIndex + 4, posIndex + 4] = (3.0 * err_rangeRate_km_s) ** 2
-    Pvv[posIndex + 5, posIndex + 5] = (3.0 * err_angle_rad) ** 2
-    Pvv[posIndex + 6, posIndex + 6] = (3.0 * err_angle_rad) ** 2
+    Pvv[posIndex + 3, posIndex + 3] = (1.0 * err_range_km) ** 2
+    Pvv[posIndex + 4, posIndex + 4] = (1.0 * err_rangeRate_km_s) ** 2
+    Pvv[posIndex + 5, posIndex + 5] = (1.0 * err_angle_rad) ** 2
+    Pvv[posIndex + 6, posIndex + 6] = (1.0 * err_angle_rad) ** 2
 
 # Add a bit of scatter to initial mean based on Pww
 # st.OnScreenLogMessage(f"mx_0 before Pww = {mx_0}", "SPSGPS", st.Severity.Info)
@@ -980,7 +984,8 @@ SetCoeffsInGravityModel(mx_0)
 # Spacecraft propagation
 x_sc_true = np.concat((sc_pos, sc_vel))
 
-# times = times[:50]
+times = times[:100]
+times_days = times_days[:100]
 for j in range(len(times)):
 
     ######################################
@@ -1284,10 +1289,10 @@ sc_vel_axes = [ax1_4, ax1_5, ax1_6]
 for i in range(len(sc_pos_axes)):
     ax = sc_pos_axes[i]
     axName = axisNames[i]
-    ax.plot(times, mx_sc_r[:, i] - sc_true_r[:, i], label=axName + "-Axis Position", color=axisColors_main[i])
-    ax.plot(times, -3.0 * np.sqrt(Pxx_sc_r[:, i]), linestyle='dashed', color=axisColors_dark[i], label=axName + r"-Axis Position 3$\sigma$ Interval")
-    ax.plot(times, 3.0 * np.sqrt(Pxx_sc_r[:, i]), linestyle='dashed', color=axisColors_dark[i])
-    ax.set_xlabel("Time (s)")
+    ax.plot(times_days, mx_sc_r[:, i] - sc_true_r[:, i], label=axName + "-Axis Position", color=axisColors_main[i])
+    ax.plot(times_days, -3.0 * np.sqrt(Pxx_sc_r[:, i]), linestyle='dashed', color=axisColors_dark[i], label=axName + r"-Axis Position 3$\sigma$ Interval")
+    ax.plot(times_days, 3.0 * np.sqrt(Pxx_sc_r[:, i]), linestyle='dashed', color=axisColors_dark[i])
+    ax.set_xlabel("Time (days)")
     ax.set_ylabel("Position error (m)")
     ax.set_title("Error in " + axName + "-Axis Position over Time")
     ax.grid()
@@ -1296,10 +1301,10 @@ for i in range(len(sc_pos_axes)):
 for i in range(len(sc_vel_axes)):
     ax = sc_vel_axes[i]
     axName = axisNames[i]
-    ax.plot(times, mx_sc_v[:, i] - sc_true_v[:, i], label=axName + "-Axis Velocity", color=axisColors_main[i])
-    ax.plot(times, -3.0 * np.sqrt(Pxx_sc_v[:, i]), linestyle='dashed', color=axisColors_dark[i], label=axName + r"-Axis Velocity 3$\sigma$ Interval")
-    ax.plot(times, 3.0 * np.sqrt(Pxx_sc_v[:, i]), linestyle='dashed', color=axisColors_dark[i])
-    ax.set_xlabel("Time (s)")
+    ax.plot(times_days, mx_sc_v[:, i] - sc_true_v[:, i], label=axName + "-Axis Velocity", color=axisColors_main[i])
+    ax.plot(times_days, -3.0 * np.sqrt(Pxx_sc_v[:, i]), linestyle='dashed', color=axisColors_dark[i], label=axName + r"-Axis Velocity 3$\sigma$ Interval")
+    ax.plot(times_days, 3.0 * np.sqrt(Pxx_sc_v[:, i]), linestyle='dashed', color=axisColors_dark[i])
+    ax.set_xlabel("Time (days)")
     ax.set_ylabel("Velocity error (m/s)")
     ax.set_title("Error in " + axName + "-Axis Velocity over Time")
     ax.grid()
@@ -1322,14 +1327,14 @@ for ii in range(len(SPS_pos_axes)):
     axName = axisNames[ii]
     for ee in range(numSPS):
         if ee == 0:
-            ax.plot(times, mx_rSPS[ee][:, ii] - cameraTruePositions[ee][ii], label=axName + "-Axis Position Error", color=axisColors_main[ii])
-            ax.plot(times, -3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii], label=axName + r"-Axis Position 3$\sigma$ Intervals")
-            ax.plot(times, 3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
+            ax.plot(times_days, mx_rSPS[ee][:, ii] - cameraTruePositions[ee][ii], label=axName + "-Axis Position Error", color=axisColors_main[ii])
+            ax.plot(times_days, -3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii], label=axName + r"-Axis Position 3$\sigma$ Intervals")
+            ax.plot(times_days, 3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
         else:
-            ax.plot(times, mx_rSPS[ee][:, ii] - cameraTruePositions[ee][ii], color=axisColors_main[ii])
-            ax.plot(times, -3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
-            ax.plot(times, 3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
-    ax.set_xlabel("Time (s)")
+            ax.plot(times_days, mx_rSPS[ee][:, ii] - cameraTruePositions[ee][ii], color=axisColors_main[ii])
+            ax.plot(times_days, -3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
+            ax.plot(times_days, 3.0 * np.sqrt(Pxx_rSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
+    ax.set_xlabel("Time (days)")
     ax.set_ylabel("Position error (m)")
     ax.set_title("SPS Position Error in " + axName + "-Axis over Time")
     ax.grid()
@@ -1340,14 +1345,14 @@ for ii in range(len(SPS_bias_axes)):
     axName = axisNames[ii]
     for ee in range(numSPS):
         if ee == 0:
-            ax.plot(times, mx_bSPS[ee][:, ii], label=axName + "-Axis Bias Error", color=axisColors_main[ii])
-            ax.plot(times, -3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii], label=axName + r"-Axis Bias 3$\sigma$ Intervals")
-            ax.plot(times, 3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
+            ax.plot(times_days, mx_bSPS[ee][:, ii], label=axName + "-Axis Bias Error", color=axisColors_main[ii])
+            ax.plot(times_days, -3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii], label=axName + r"-Axis Bias 3$\sigma$ Intervals")
+            ax.plot(times_days, 3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
         else:
-            ax.plot(times, mx_bSPS[ee][:, ii], color=axisColors_main[ii])
-            ax.plot(times, -3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
-            ax.plot(times, 3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
-    ax.set_xlabel("Time (s)")
+            ax.plot(times_days, mx_bSPS[ee][:, ii], color=axisColors_main[ii])
+            ax.plot(times_days, -3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
+            ax.plot(times_days, 3.0 * np.sqrt(Pxx_bSPS[ee][:, ii]), linestyle='dashed', color=axisColors_dark[ii])
+    ax.set_xlabel("Time (days)")
     ax.set_ylabel("Bias error (m)")
     ax.set_title("SPS Bias Error in " + axName + "-Axis over Time")
     ax.grid()
@@ -1411,24 +1416,24 @@ for ii in range(numClm):
     Pxx_Clm_percentError = 100.0 * np.sqrt(Pxx_Clm[ii]) / np.abs(gravModel_true.Clm[idx_l, idx_m])
 
     if ii == 0:
-        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)], label=r"Error in $C[2,0]$")
-        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)], label=r"$C[2,0]$ 3$\sigma$ Intervals")
-        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+        ax4_1.plot(times_days, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)], label=r"Error in $C[2,0]$")
+        ax4_1.plot(times_days, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)], label=r"$C[2,0]$ 3$\sigma$ Intervals")
+        ax4_1.plot(times_days, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
     else:
-        ax4_1.plot(times, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)])
-        ax4_1.plot(times, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
-        ax4_1.plot(times, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+        ax4_1.plot(times_days, mx_Clm[ii] - gravModel_true.Clm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)])
+        ax4_1.plot(times_days, -3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+        ax4_1.plot(times_days, 3.0 * np.sqrt(Pxx_Clm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
 
 customHandles_Clm = [
-    Line2D([0], [0], color="dimgray", label=r"Percent Error in $C[l,m]$"),
-    Line2D([0], [0], color="dimgray", ls="--", label=r"$C[l,m]$ 3$\sigma$ Intervals (Percent Error)")
+    Line2D([0], [0], color="dimgray", label=r"Error in $C[l,m]$"),
+    Line2D([0], [0], color="dimgray", ls="--", label=r"$C[l,m]$ 3$\sigma$ Intervals")
 ]
 currentHandles, currentLabels = ax4_1.get_legend_handles_labels()
 allHandles = currentHandles + customHandles_Clm
 
-ax4_1.set_xlabel("Time (s)")
-ax4_1.set_ylabel(r"Normalized, Non-Dimensional $C[l,m]$ Coefficients")
-ax4_1.set_title(r"Percent Error in Normalized, Non-Dimensional $C[l,m]$ Coefficients over Time")
+ax4_1.set_xlabel("Time (days)")
+ax4_1.set_ylabel(r"Normalized $C[l,m]$ Coefficients")
+ax4_1.set_title(r"Error in Normalized $C[l,m]$ Coefficients over Time")
 ax4_1.grid()
 ax4_1.legend(handles=allHandles)
 
@@ -1439,20 +1444,20 @@ for ii in range(numSlm):
     mx_Slm_percentError = 100.0 * (mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m]) / gravModel_true.Slm[idx_l, idx_m]
     Pxx_Slm_percentError = 100.0 * np.sqrt(Pxx_Slm[ii]) / np.abs(gravModel_true.Slm[idx_l, idx_m])
     
-    ax4_2.plot(times, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)])
-    ax4_2.plot(times, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
-    ax4_2.plot(times, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+    ax4_2.plot(times_days, mx_Slm[ii] - gravModel_true.Slm[idx_l, idx_m], color=sequenceColors_main[ii % len(sequenceColors_main)])
+    ax4_2.plot(times_days, -3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
+    ax4_2.plot(times_days, 3.0 * np.sqrt(Pxx_Slm[ii]), linestyle='dashed', color=sequenceColors_dark[ii % len(sequenceColors_dark)])
 
 customHandles_Slm = [
-    Line2D([0], [0], color="dimgray", label=r"Percent Error in $S[l,m]$"),
-    Line2D([0], [0], color="dimgray", ls="--", label=r"$S[l,m]$ 3$\sigma$ Intervals (Percent Error)")
+    Line2D([0], [0], color="dimgray", label=r"Error in $S[l,m]$"),
+    Line2D([0], [0], color="dimgray", ls="--", label=r"$S[l,m]$ 3$\sigma$ Intervals")
 ]
 currentHandles, currentLabels = ax4_2.get_legend_handles_labels()
 allHandles = currentHandles + customHandles_Slm
 
-ax4_2.set_xlabel("Time (s)")
-ax4_2.set_ylabel(r"Normalized, Non-Dimensional $S[l,m]$ Coefficients")
-ax4_2.set_title(r"Percent Error in Normalized, Non-Dimensional $S[l,m]$ Coefficients over Time")
+ax4_2.set_xlabel("Time (days)")
+ax4_2.set_ylabel(r"Normalized $S[l,m]$ Coefficients")
+ax4_2.set_title(r"Error in Normalized $S[l,m]$ Coefficients over Time")
 ax4_2.grid()
 ax4_2.legend(handles=allHandles)
 

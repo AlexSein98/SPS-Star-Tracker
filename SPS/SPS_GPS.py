@@ -407,7 +407,7 @@ for ee in range(numSPS):
 
             g_thirdBody = st.SimGlobals.SampleVectorField("ThirdBodyGravity", stateNow).ExprIn(planetFixedFrame)
             g_thirdBody -= st.SimGlobals.SampleVectorField("ThirdBodyGravity", planetStateDummy).ExprIn(planetFixedFrame)
-            st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSGPS", st.Severity.Info)
+            # st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSGPS", st.Severity.Info)
 
             g += g_thirdBody - np.cross(Omega, np.cross(Omega, cameraTruePositions[ee]))
             g_true = copy.deepcopy(g)
