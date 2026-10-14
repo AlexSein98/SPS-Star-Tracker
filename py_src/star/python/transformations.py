@@ -79,6 +79,20 @@ def T_to_latlon(T: npt.NDArray):
     return r_hat_to_latlon(r_hat)
 
 
+'''
+Converts planetographic (i.e., geodetic) latitude, longitude, and ellipsoid-referenced 
+altitude to an equivalent Cartesian position vector in the planet-fixed frame.
+
+Inputs:
+lat:    geodetic latitude [degrees]
+lon:    longitude [degrees]
+alt:    ellipsoid-referenced altitude [meters]
+a:      planet equatorial radius [meters]
+b:      planet polar radius [meters]
+
+Outputs:
+[x, y, z]:  Cartesian position vector in planet-fixed frame [meters]
+'''
 def planetographic_to_cartesian(lat: float, lon: float, alt: float, a: float, b: float) -> npt.NDArray:
     lat_rad: float = np.deg2rad(lat)
     lon_rad: float = np.deg2rad(lon)
@@ -89,6 +103,20 @@ def planetographic_to_cartesian(lat: float, lon: float, alt: float, a: float, b:
     return np.array([x, y, z])
 
 
+'''
+Converts a Cartesian position vector in the planet-fixed frame to an equivalent 
+planetographic (i.e., geodetic) latitude, longitude, and ellipsoid-referenced altitude.
+
+Outputs:
+xyz:    Cartesian position vector in planet-fixed frame [meters]
+a:      planet equatorial radius [meters]
+b:      planet polar radius [meters]
+
+Outputs:
+lat:    geodetic latitude [degrees]
+lon:    longitude [degrees]
+alt:    ellipsoid-referenced altitude [meters]
+'''
 def cartesian_to_planetographic(xyz: npt.NDArray, a: float, b: float) -> tuple[float, float, float]:
     # From Vallado, Fundamentals of Astrodynamics and Applications 4th edition, Algorithm 12: "ECEF To LatLon"
     x: float = xyz[0]
