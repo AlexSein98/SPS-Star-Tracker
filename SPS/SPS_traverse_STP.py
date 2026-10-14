@@ -336,8 +336,8 @@ numImages: int = alignmentCutoff + 200
 # site: str = "Apollo11"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
-# site: str = "ConnectingRidge"
-site: str = "NobileRim1"
+site: str = "ConnectingRidge"
+# site: str = "NobileRim1"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
 int_seed = int(hash_object.hexdigest(), 16)
@@ -353,7 +353,7 @@ if site == "Ideal":
     h_ellp_0 = 0.0
 
 elif site == "Apollo11":
-    # Something with low gravity variation (ideal)
+    # Something like Apollo 11
     phi_pg_0 = 0.67
     lon_pg_0 = 23.47
     h_ellp_0 = -1500.0
@@ -579,7 +579,7 @@ if is_dir_empty(renderDir):
 
         g_thirdBody = st.SimGlobals.SampleVectorField("ThirdBodyGravity", stateNow).ExprIn(planetFixedFrame)
         g_thirdBody -= st.SimGlobals.SampleVectorField("ThirdBodyGravity", planetStateDummy).ExprIn(planetFixedFrame)
-        st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSTraverse", st.Severity.Info)
+        # st.OnScreenLogMessage(f"True third body gravity = {g_thirdBody}", "SPSTraverse", st.Severity.Info)
 
         g += g_thirdBody - np.cross(Omega, np.cross(Omega, positionNow))
         g_true = copy.deepcopy(g)
@@ -1050,7 +1050,7 @@ if doAngVel:
         if np.linalg.norm(x_true[0:3]) >= 1.0:
             x_true[0:3] = st.math.ModifiedRodriguesParameters(x_true[0:3]).shadow().ToVector()
 
-        st.OnScreenLogMessage(f"MRP     = {mx_plus[0:3]}", "SPS", st.Severity.Info)
+        # st.OnScreenLogMessage(f"MRP     = {mx_plus[0:3]}", "SPS", st.Severity.Info)
         # st.OnScreenLogMessage(f"Ang Vel = {mx_plus[3:6]}", "SPS", st.Severity.Info)
         # st.OnScreenLogMessage(f"T_i_c   = {quatEstimates[j]}", "SPS", st.Severity.Info)
 
@@ -1422,11 +1422,17 @@ for j in range(len(times[alignmentCutoff:endpoint])):
         st.OnScreenLogMessage(f'Elapsed time: {elapsedTime}', "SPSTraverse", st.Severity.Info)
         st.OnScreenLogMessage("------------------------------------------------------------------------------------------------------\n", "SPSTraverse", st.Severity.Info)
 
+
+cameraTraversePositions_path = os.path.join(outputDir, "cameraTraversePositions_" + planetName + ".csv")
+cameraEstimatedPositions_path = os.path.join(outputDir, "cameraEstimatedPositions_" + planetName + ".csv")
+
+cameraTraversePositions: list[npt.NDArray] = positions[alignmentCutoff:endpoint]
+write_csv(cameraTraversePositions_path, cameraTraversePositions)
+write_csv(cameraEstimatedPositions_path, mx_history)
+
 ########################
 ####    PLOTTING    ####
 ########################
-
-cameraTraversePositions: list[npt.NDArray] = positions[alignmentCutoff:endpoint]
 
 fig1 = plt.figure(layout='constrained')
 ax1 = fig1.add_subplot(131)
