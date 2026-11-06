@@ -1,0 +1,330 @@
+{
+  "meta": {
+    "schemaversion_major": 2,
+    "schemaversion_minor": 0,
+    "schemaversion_patch": 0,
+    "Title": "Solar System",
+    "Description": "The whole solar system."
+  },
+  "IncludeSims": [
+    "Core/Compute_Server/packages/BaseSims/SolarSystem_NoGravity.simconf",
+    "Core/Compute_Server/packages/BaseSims/SolarSystem_InertialFrames.simconf"
+  ],
+  "SystemManager": {
+    "FieldEffects": [
+      {
+        "Nametag": "Gravity_Earth_Harmonic",
+        "FieldName": "Gravity",
+        "Source": "EnvironmentalModels/Gravity/bin/Gravity_Harmonic",
+        "Type": "Vector",
+        "Active": true,
+        "Inst_Parameters": {
+          "Gravitator": [ "EntityRef", "Earth" ],
+          "Model": "EarthGrav_earth_GEMT1",
+          "Degree": [ "int32", 32 ],
+          "Order": [ "int32", 32 ]
+        }
+      },
+      {
+        "Nametag": "Gravity_Moon_Spherical",
+        "FieldName": "ThirdBodyGravity",
+        "Source": "EnvironmentalModels/Gravity/bin/Gravity_Spherical",
+        "Type": "Vector",
+        "Active": true,
+        "Inst_Parameters": {
+          "Gravitator": [ "EntityRef", "Moon" ]
+        }
+      },
+      {
+        "Nametag": "Gravity_Sun_Spherical",
+        "FieldName": "ThirdBodyGravity",
+        "Source": "EnvironmentalModels/Gravity/bin/Gravity_Spherical",
+        "Type": "Vector",
+        "Active": true,
+        "Inst_Parameters": {
+          "Gravitator": [ "EntityRef", "Sun" ]
+        }
+      },
+      {
+        "Nametag": "Gravity_Jupiter_Spherical",
+        "FieldName": "ThirdBodyGravity",
+        "Source": "EnvironmentalModels/Gravity/bin/Gravity_Spherical",
+        "Type": "Vector",
+        "Active": true,
+        "Inst_Parameters": {
+          "Gravitator": [ "EntityRef", "Jupiter" ]
+        }
+      }
+    ],
+    "Systems": [
+      {
+        "Nametag": "SnapAssetToPlanet",
+        "Source": "SurfaceOperations/SnapAssetToPlanet/bin/SnapAssetToPlanet",
+        "Active": false,
+        "Type": "Normal",
+        "Frequency": 1.0,
+        "Inst_Parameters": {
+          "DoSlowGraphicsStuff": true,
+          "TraverseFrame": [ "EntityRef", "Earth" ],
+          "PlanetRadius_m": 6378137.0,
+          "PlanetRadiusPolar_m": 6356752.314245,
+          "LOD": 22,
+          "Datasets": [
+            "array",
+            "string",
+            "Earth/Global/Topography/gebco_08_rev_elev_A1_grey_geo"
+          ],
+          "DatasetPriorities": [
+            "array",
+            "double",
+            0.0
+          ]
+        }
+      },
+      {
+        "Nametag": "SnapPawnToPlanet",
+        "Source": "SurfaceOperations/SnapAssetToPlanet/bin/SnapAssetToPlanet",
+        "Active": true,
+        "Type": "Normal",
+        "Frequency": 60.0,
+        "Inst_Parameters": {
+          "DoSlowGraphicsStuff": true,
+          "AppliedToPawn": true,
+          "UpdateOnTick": true,
+          "TraverseFrame": [ "EntityRef", "Earth" ],
+          "PlanetRadius_m": 6378137.0,
+          "PlanetRadiusPolar_m": 6356752.314245,
+          "LOD": 22,
+          "Datasets": [
+            "array",
+            "string",
+            "Earth/Global/Topography/gebco_08_rev_elev_A1_grey_geo"
+          ],
+          "DatasetPriorities": [
+            "array",
+            "double",
+            0.0
+          ]
+        }
+      },
+      {
+        "Nametag": "SPS_RealData",
+        "Source": "Local/Repos/SPS-Star-Tracker/SPS/SPS_RealData.py",
+        "Type": "Python",
+        "Active": true,
+        "Inst_Parameters": {
+          "Planet": [ "EntityRef", "Earth" ],
+          "Camera": [ "EntityRef", "CameraAndIMU" ],
+          "DataSource": "REPLACE_ME_WITH_CORRECT_PATH",
+          "TrueLocationLLA": [ "doubleV3", 30.643609, -96.337302, 86.281612 ],
+          "NOTE": "Replace TrueLocationLLA with true north latitude (deg), east longitude (deg), and WGS-84 altitude (meters)",
+          "LoopFreqHz": 60.0
+        }
+      }
+    ],
+    "Taskflows": [
+    ]
+  },
+  "DataManager": {
+    "SimEntity": {
+      "Time": {
+        "UseCurrentTime": false,
+        "StartDateTAI": [ "timestamp", "2026-05-01T16:00:00.000000Z" ],
+        "StartDateTAI_Global": [ "timestamp", "2026-05-01T12:00:00.000000Z" ],
+        "StartDateTAI_002": [ "timestamp", "2022-12-05T16:04:30.000000Z" ],
+        "StartDateTAI_005": [ "timestamp", "2022-12-05T16:05:06.000000Z" ],
+        "Timescale": 0.0
+      },
+      "GraphicsFrame": [ "EntityRef", "Earth" ],
+      "J2000Frame": [ "EntityRef", "SSB" ]
+    },
+    "entities": [
+      {
+        "#Required": {
+          "Name": "Spectator_Earth",
+          "Type": "Pawn",
+          "Systems": []
+        },
+        "#Pawn": {
+          "BP_Path": "/Game/SpaceCraft_UI/FlatScreen/UIP2D_Spectator.UIP2D_Spectator_C",
+          "Role_Name": "Start at Earth",
+          "Is_Possessed": false,
+          "Username": "(No User)",
+          "GraphicsFrame": [ "EntityRef", "Earth" ],
+          "CamProjMatrix": [
+            "doubleM4x4",
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Gadgets": {
+            "0": {
+              "Name": "Time",
+              "Static": true,
+              "WidgetClass": "WidgetBlueprint'/Game/SpaceCraft_UI/FlatScreen/TimeManagement.TimeManagement'",
+              "IconTexture": "Texture2D'/Game/BuilderTools/WidgetImages/MainMenu/MSTV_MMIcon_Simulate.MSTV_MMIcon_Simulate'",
+              "Slot": "TopLeft"
+            },
+            "1": {
+              "Name": "Camera",
+              "Static": true,
+              "WidgetClass": "WidgetBlueprint'/Game/SpaceCraft_UI/FlatScreen/W_CameraControl_Physical.W_CameraControl_Physical'",
+              "IconTexture": "Texture2D'/Game/SpaceCraft_UI/FlatScreen/CameraIcon_white.CameraIcon_white'",
+              "Slot": "TopRight"
+            }
+          }
+        },
+        "Dynamics": {
+          "Propagator": "Unreal_Pawn",
+          "Mass": 1,
+          "ResidentFrame": [ "EntityRef", "Earth" ]
+        },
+        "Graphics": {
+          "Scale": 1,
+          "RenderFar": true
+        },
+        "Location": [ "doubleV3", -606.249e3, -5458.748e3, 3232.006e3 ],
+        "Rotation": [ "doubleV4", 0.0, 0.0, 0.0, 1.0 ],
+        "Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+        "AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+        "Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+        "AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+        "TransitionGraphicsFrame": true,
+        "ConstrainZAxisToPlanet": true,
+        "NoClip": true,
+        "MovementSpeed": 10.0,
+        "Height": 0.0
+      },
+      {
+        "#Required": {
+          "Name": "TripodBase",
+          "Type": "FromTemplate",
+          "Systems": [ "SnapAssetToPlanet" ]
+        },
+        "#FromTemplate": {
+          "Source_Path": "Local/Repos/SPS/Entities/TripodBase.enconf",
+          "ParamOverrides": {
+            "Dynamics": {
+              "Propagator": "Custom",
+              "ResidentFrame": [ "EntityRef", "Earth" ]
+            },
+            "Location": [ "doubleV3", -606.254e3, -5458.748e3, 3232.006e3 ],
+            "Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Rotation": [ "doubleV4", 0.0, 0.0, 0.0, 1.0 ],
+            "AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Height": 0.0,
+            "AlignToSurfaceNormal": true
+          }
+        }
+      },
+      {
+        "#Required": {
+          "Name": "TripodLeg1",
+          "Type": "FromTemplate",
+          "Systems": []
+        },
+        "#FromTemplate": {
+          "Source_Path": "Local/Repos/SPS/Entities/TripodLeg.enconf",
+          "ParamOverrides": {
+            "Dynamics": {
+              "Propagator": "Custom",
+              "ResidentFrame": [ "EntityRef", "TripodBase" ]
+            },
+            "Location": [ "doubleV3", -0.266028, 0.45889, 0.467019 ],
+            "Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Rotation": [ "doubleV4", -0.016928, 0.258264, -0.866314, -0.427216 ],
+            "AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ]
+          }
+        }
+      },
+      {
+        "#Required": {
+          "Name": "TripodLeg2",
+          "Type": "FromTemplate",
+          "Systems": []
+        },
+        "#FromTemplate": {
+          "Source_Path": "Local/Repos/SPS/Entities/TripodLeg.enconf",
+          "ParamOverrides": {
+            "Dynamics": {
+              "Propagator": "Custom",
+              "ResidentFrame": [ "EntityRef", "TripodBase" ]
+            },
+            "Location": [ "doubleV3", -0.304643, -0.530404, 0.32623 ],
+            "Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Rotation": [ "doubleV4", -0.232127, 0.114474, -0.063172, -0.963858 ],
+            "AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ]
+          }
+        }
+      },
+      {
+        "#Required": {
+          "Name": "TripodLeg3",
+          "Type": "FromTemplate",
+          "Systems": []
+        },
+        "#FromTemplate": {
+          "Source_Path": "Local/Repos/SPS/Entities/TripodLeg.enconf",
+          "ParamOverrides": {
+            "Dynamics": {
+              "Propagator": "Custom",
+              "ResidentFrame": [ "EntityRef", "TripodBase" ]
+            },
+            "Location": [ "doubleV3", 0.618094, 0.001328, 0.313013 ],
+            "Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Rotation": [ "doubleV4", -0.143789, -0.215201, 0.536634, -0.803142 ],
+            "AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ]
+          }
+        }
+      },
+      {
+        "#Required": {
+          "Name": "CameraAndIMU",
+          "Type": "FromTemplate",
+          "Systems": []
+        },
+        "#FromTemplate": {
+          "Source_Path": "Local/Repos/SPS/Entities/CameraAndIMU.enconf",
+          "ParamOverrides": {
+            "Dynamics": {
+              "Propagator": "Custom",
+              "ResidentFrame": [ "EntityRef", "TripodBase" ]
+            },
+            "Location": [ "doubleV3", 0.0, 0.0, 1.39142 ],
+            "Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "Rotation": [ "doubleV4", 0.0, 0.0, 0.0, 1.0 ],
+            "AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+            "RenderParams": {
+              "Index": [ "int32", 0 ],
+              "NumberOfCaptures": [ "int32", 500 ],
+              "dt_seconds": 1.0
+            }
+          }
+        }
+      }
+    ]
+  }
+}
