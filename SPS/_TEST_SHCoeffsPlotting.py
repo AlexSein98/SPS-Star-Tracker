@@ -55,7 +55,7 @@ def WeightedLeastSquares(data: npt.NDArray, variances: npt.NDArray) -> npt.NDArr
 
 doLeastSquares: bool = True
 startIdx: int = 0
-endIdx: int = 400
+endIdx: int = 800
 tooSmallCutoff: float = 1e-8
 
 

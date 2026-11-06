@@ -131,6 +131,18 @@ def positivize_quat(q: npt.NDArray) -> npt.NDArray:
         return np.array([-q[0], -q[1], -q[2], -q[3]])
 
 
+# For w-last quaternions
+def skew_symmetric_quat(q: npt.NDArray) -> npt.NDArray:
+    # return np.array([[q[3], q[2], -q[1], q[0]],
+    #                  [-q[2], q[3], q[0], q[1]],
+    #                  [q[1], -q[0], q[3], q[2]],
+    #                  [-q[0], -q[1], -q[2], q[3]]])
+    return np.array([[q[3], -q[2], q[1], q[0]],
+                     [q[2], q[3], -q[0], q[1]],
+                     [-q[1], q[0], q[3], q[2]],
+                     [-q[0], -q[1], -q[2], q[3]]])
+
+
 def quat_mult(q1: npt.NDArray, q2: npt.NDArray):
     x = q1[0]
     y = q1[1]
@@ -267,6 +279,80 @@ def estimate_omega_EnrightForm(quats: list[npt.NDArray], deltaT: float, T_unrota
     return omega_sum / float(len(omega_history)), omega_history
 
 
+def average_quats(quats: list[npt.NDArray]) -> npt.NDArray:
+    N = len(quats)
+    M = np.zeros((4, 4))
+    w = 1.0 / float(N)
+    for i in range(N):
+        M += w * np.outer(quats[i], quats[i])
+
+    eigvals, eigvecs = np.linalg.eig(M)
+    eigvalArgMax = np.argmax(eigvals)
+    eigvecMax = eigvecs[:, eigvalArgMax]
+    return positivize_quat(normalize(eigvecMax))
+
+
+"""
+Following this QuateRA paper:
+
+Recursive Star-Identification Algorithm Using an Adaptive Singular-Value-Decomposition-Based Angular-Velocity Estimator
+Hunter Johnston, Carl Leake, Marcelino M. de Almeida, and Daniele Mortari
+Journal of Spacecraft and Rockets 2021 58:4, 1138-1148
+
+"""
+def estimate_omega_QuateRA(quats: list[npt.NDArray], times: list[float]) -> npt.NDArray:
+    N = len(quats)
+
+    # Step 1, following Equation (4)
+    Q_k_n = np.zeros((4, N))
+    for k in range(N):
+        Q_k_n[:, k] = quats[k]
+
+    # Step 2
+    result = np.linalg.svd(Q_k_n @ Q_k_n.T)
+    U = result.U
+    u1 = U[:, 0]
+    u2 = U[:, 1]
+
+    # Step 3
+    omega_opt = skew_symmetric_quat(u2) @ quat_inverse(u1)
+
+    # Steps 4 and 5
+    Phi = np.zeros(N)
+    weights = np.zeros(N)
+    for i in range(N):
+        # Optimal quaternions
+        q_proj_u1: npt.NDArray = quats[i].dot(u1)
+        q_proj_u2: npt.NDArray = quats[i].dot(u2)
+        q_i: npt.NDArray = (q_proj_u1 * u1 + q_proj_u2 * u2) / np.sqrt(q_proj_u1 ** 2 + q_proj_u2 ** 2)
+        Phi[i] = 2.0 * np.atan2(q_i.dot(u2), q_i.dot(u1))
+
+        # Weights
+        quat_deviation: npt.NDArray = normalize(skew_symmetric_quat(q_i) @ quat_inverse(quats[i]))
+        angle_deviation: float = 2.0 * np.arccos(np.clip(quat_deviation[3], -1.0, 1.0))
+        weights[i] = 1.0 / (angle_deviation ** 2)
+
+    Phi = np.unwrap(Phi, discont=2.0 * np.pi)
+    st.OnScreenLogMessage(f"Phi = {Phi}", "SPSTraverse", st.Severity.Info)
+
+    # W = np.diag(weights)
+    W = np.identity(N)
+
+    # Step 6
+    H = np.ones((N, 2))
+    for k in range(N):
+        H[k, 1] = times[k]
+    X_opt = np.linalg.inv(H.T @ W @ H) @ H.T @ W @ Phi
+    Omega_opt = X_opt[1]
+
+    st.OnScreenLogMessage(f"omega_opt = {omega_opt}", "SPSTraverse", st.Severity.Info)
+    st.OnScreenLogMessage(f"Omega_opt = {Omega_opt}", "SPSTraverse", st.Severity.Info)
+
+    # Return angular velocity
+    angVel: npt.NDArray = Omega_opt * omega_opt
+    return angVel[0:3]
+
+
 os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
 
 ##################################
@@ -332,11 +418,11 @@ numImages: int = alignmentCutoff + 200
 ####    SITE SELECTION    ####
 ##############################
 
-# site: str = "Ideal"
+site: str = "Ideal"
 # site: str = "Apollo11"
 # site: str = "Apollo15"
 # site: str = "Apollo17"
-site: str = "ConnectingRidge"
+# site: str = "ConnectingRidge"
 # site: str = "NobileRim1"
 
 hash_object = hashlib.sha256(site.encode('utf-8'))
@@ -928,6 +1014,7 @@ if doAngVel:
     st.OnScreenAlert(f"Made it to ang vel processing!", "SPS", st.Severity.Warning)
 
     T_unrotate: list[npt.NDArray] = []
+    Q_unrotate: list[npt.NDArray] = []
     T_planet: list[npt.NDArray] = []
     q_planet: list[npt.NDArray] = []
     
@@ -944,10 +1031,23 @@ if doAngVel:
             for qq in range(4):
                 _q_planet[qq] = -_q_planet[qq]
         q_planet.append(_q_planet)
+
+        _q_unrotate = positivize_quat(st.math.DCM_to_Quat(_T_unrotate))
+        Q_unrotate.append(_q_unrotate)
         
     st.OnScreenAlert(f"Made it to ang vel bulk estimation!", "SPS", st.Severity.Warning)
 
-    omega_est, omega_hist = estimate_omega_EnrightForm(quatEstimates, alignmentTimeStep_s, T_unrotate)
+    # omega_est, omega_hist = estimate_omega_EnrightForm(quatEstimates, alignmentTimeStep_s, T_unrotate)
+
+    q_unrotate_avg = average_quats(Q_unrotate)
+    T_unrotate_avg = st.math.Quat_to_DCM(normalize(q_unrotate_avg))
+
+    omega_est = -estimate_omega_QuateRA(quatEstimates, times[:alignmentCutoff])
+    omega_est_QuateRA = T_unrotate_avg @ omega_est
+
+    st.OnScreenLogMessage(f"omega_true           = {np.rad2deg(Omega)} deg/s", "SPSTraverse", st.Severity.Info)
+    st.OnScreenLogMessage(f"omega_est  (QuateRA) = {np.rad2deg(omega_est_QuateRA)} deg/s", "SPSTraverse", st.Severity.Info)
+    st.OnScreenLogMessage(f"omega diff (QuateRA) = {100.0 * (omega_est_QuateRA - Omega) / Omega} %", "SPSTraverse", st.Severity.Info)
 
     ###### UKF
     st.OnScreenAlert(f"Made it to start of UKF init!", "SPS", st.Severity.Warning)
@@ -962,11 +1062,11 @@ if doAngVel:
     x_true = copy.deepcopy(mx_0)
 
     Pxx_0: npt.NDArray = np.identity(6)
-    Pxx_0[0:3, 0:3] = np.identity(3) * 1e-2 ** 2
-    Pxx_0[3:6, 3:6] = np.identity(3) * 1e-5 ** 2
+    Pxx_0[0:3, 0:3] = np.identity(3) * 1e-3 ** 2
+    Pxx_0[3:6, 3:6] = np.identity(3) * 1e-6 ** 2
 
     Pww: npt.NDArray = Pxx_0 * 0.1 ** 2
-    Pvv: npt.NDArray = np.identity(numMeasurements) * 4e-5 ** 2
+    Pvv: npt.NDArray = np.identity(numMeasurements) * 1e-6 ** 2
 
     mx_0 += np.linalg.cholesky(Pww) @ rng.normal(0.0, 1.0, numStates)
 
@@ -1130,7 +1230,8 @@ if doAngVel:
         # Kalman gain
         K = Pxz_minus @ np.linalg.inv(Pzz_minus)
 
-        z_new = omega_hist[j - 1]
+        # z_new = omega_hist[j - 1]
+        z_new = copy.deepcopy(omega_est)
         z_history.append(copy.deepcopy(z_new))
 
         mx_plus_candidate = mx_minus + gamma_underweight * K @ (z_new - mz_minus)
