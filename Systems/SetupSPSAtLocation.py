@@ -54,22 +54,32 @@ def NewSPSLocation(paramMap: st.ParamMap, timestamp: st.timestamp):
     planet: st.Entity = paramMap.GetParam(st.VarType.entityRef, "Planet")
     planetFrame = planet.GetBodyFixedFrame()
     radius: float = planet.GetParam(st.VarType.double, ["#Planet", "General", "Radius_m"])
-    
-    sun: st.Entity = st.SimGlobals.GetSimEntity().GetParam(st.VarType.entityRef, ["CelestialObjects", "Sun"])
-    sunLoc = sun.getLocation().WRT_ExprIn(planetFrame)
-    sunDir = sunLoc / np.linalg.norm(sunLoc)
 
-    axisOffset: float = random.uniform(0.0, 0.5 * np.pi)
-    axisRotation: float = random.uniform(0.0, 2.0 * np.pi)
-    
-    # Choose axis to offset-rotate about
-    axis1: npt.NDArray = np.array([0.0, 0.0, 1.0])
-    if np.dot(sunDir, axis1) > 0.999:
-        axis1 = np.array([1.0, 0.0, 0.0])
-    
-    # Calculate position unit vector
-    rHat = RotateVectorAroundAxis(RotateVectorAroundAxis(sunDir, axis1, axisOffset), sunDir, axisRotation)
-    loc, _ = st.ProcPlanet.SampleGround(planetData, radius * rHat, radius, 0.0, 22)
+    loc = np.zeros(3)  # Initialize
+    localMap: bool = this.GetParam(st.VarType.bool, "LocalMap")
+    if localMap:
+        latitudeBounds_deg = this.GetParam(st.VarType.doubleV2, "LatitudeBounds")
+        longitudeBounds_deg = this.GetParam(st.VarType.doubleV2, "LongitudeBounds")
+        latitude: float = np.deg2rad(random.uniform(latitudeBounds_deg[0], latitudeBounds_deg[1]))
+        longitude: float = np.deg2rad(random.uniform(longitudeBounds_deg[0], longitudeBounds_deg[1]))
+        rHat = st.PlanetUtils.LLA_to_PCPF(st.PlanetUtils.LatLonAlt(latitude, longitude, 0.0), radius)
+        loc, _ = st.ProcPlanet.SampleGround(planetData, rHat, radius, 0.0, 22)
+    else:
+        sun: st.Entity = st.SimGlobals.GetSimEntity().GetParam(st.VarType.entityRef, ["CelestialObjects", "Sun"])
+        sunLoc = sun.getLocation().WRT_ExprIn(planetFrame)
+        sunDir = sunLoc / np.linalg.norm(sunLoc)
+
+        axisOffset: float = random.uniform(0.0, 0.5 * np.pi)
+        axisRotation: float = random.uniform(0.0, 2.0 * np.pi)
+        
+        # Choose axis to offset-rotate about
+        axis1: npt.NDArray = np.array([0.0, 0.0, 1.0])
+        if np.dot(sunDir, axis1) > 0.999:
+            axis1 = np.array([1.0, 0.0, 0.0])
+        
+        # Calculate position unit vector
+        rHat = RotateVectorAroundAxis(RotateVectorAroundAxis(sunDir, axis1, axisOffset), sunDir, axisRotation)
+        loc, _ = st.ProcPlanet.SampleGround(planetData, radius * rHat, radius, 0.0, 22)
 
     st.OnScreenLogMessage(f"New location = {loc}", "SPSGuessr Setup", st.Severity.Info)
     
@@ -93,30 +103,8 @@ def SetupSPS(paramMap: st.ParamMap, timestamp: st.timestamp):
     flu = st.PlanetUtils.ForwardLeftUpFromAzimuth(newLoc, 0.0, radius)
     rot = st.PlanetUtils.RotFromForwardLeftUp(flu)
 
-    # locOverride = st.PhysEffect(st.PhysEffectType.LocationOverride, planetFrame)
-    # locOverride.setVector(newLoc)
-
-    # rotOverride = st.PhysEffect(st.PhysEffectType.RotationOverride, planetFrame)
-    # rotOverride.setQuaternion(st.math.DCM_to_Quat(rot))
-
-    # spsDevice.setPhysEffect("LocationOverride", locOverride)
-    # spsDevice.setPhysEffect("RotationOverride", rotOverride)
-
     spsDevice.setLocation(st.frames.FramedLoc(newLoc, planetFrame))
     spsDevice.setRotation(st.frames.FramedRot(rot, planetFrame))
-
-    # TODO: neither of these are working?
-    # PhysEffect overrides
-    # overrideLoc = st.PhysEffect(st.PhysEffectType.LocationOverride, planetFrame)
-    # overrideRot = st.PhysEffect(st.PhysEffectType.RotationOverride, planetFrame)
-    # overrideLoc.setVector(newLoc - 3.0 * flu.forward())
-    # overrideRot.setQuaternion(st.math.DCM_to_Quat(rot))
-    # pawn.setPhysEffect("OverrideLoc", overrideLoc)
-    # pawn.setPhysEffect("OverrideRot", overrideRot)
-
-    # Direct setting
-    # pawn.setLocation(st.frames.FramedLoc(newLoc - 3.0 * flu.forward(), planetFrame))
-    # pawn.setRotation(st.frames.FramedRot(rot, planetFrame))
 
     payload = st.ParamMap()
     payload.AddParam(st.VarType.entityRef, "Pawn", pawn)

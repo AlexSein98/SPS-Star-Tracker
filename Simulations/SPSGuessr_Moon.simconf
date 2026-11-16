@@ -5,14 +5,15 @@
 		"schemaversion_patch": 0
 	},
 	"IncludeSims": [
-		"Core/Compute_Server/packages/BaseSims/EarthMoonSun_WithInertial.simconf"
+		"Core/Compute_Server/packages/BaseSims/SolarSystem_NoGravity.simconf",
+		"Core/Compute_Server/packages/BaseSims/SolarSystem_InertialFrames.simconf"
 	],
 	"SystemManager": {
 		"FieldEffects": [
 			{
-				"Nametag": "Gravity_Moon_Harmonic_Relativistic",
+				"Nametag": "Gravity_Moon_Harmonic",
 				"FieldName": "Gravity",
-				"Source": "EnvironmentalModels/Gravity/bin/Gravity_Harmonic_Relativistic",
+				"Source": "EnvironmentalModels/Gravity/bin/Gravity_Harmonic",
 				"Type": "Vector",
 				"Active": true,
 				"Inst_Parameters": {
@@ -36,6 +37,7 @@
 						0.0,
 						1.0,
 						2.0,
+						3.0,
 						3.0
 					],
 					"Datasets": [
@@ -44,7 +46,8 @@
 						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
 						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
 						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
-						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters"
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters",
+						"Moon/Local/Apollo17/APOLLO17_DTM_150CM"
 					],
 					"DoSlowGraphicsStuff": true,
 					"LOD": 22.0,
@@ -68,6 +71,7 @@
 						0.0,
 						1.0,
 						2.0,
+						3.0,
 						3.0
 					],
 					"Datasets": [
@@ -76,7 +80,8 @@
 						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
 						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
 						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
-						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters"
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters",
+						"Moon/Local/Apollo17/APOLLO17_DTM_150CM"
 					],
 					"DoSlowGraphicsStuff": true,
 					"LOD": 22.0,
@@ -89,55 +94,13 @@
 				"Type": "Normal"
 			},
 			{
-				"Nametag": "Spicy",
-				"Active": true,
-				"FreqType": "Sim",
-				"Frequency": 200.0,
-				"Inst_Parameters": {
-					"observer": "SSB",
-					"observerframe": "J2000"
-				},
-				"Singleton": true,
-				"Source": "Spicy/bin/Spicy",
-				"Type": "Normal"
-			},
-			{
-				"Nametag": "AttitudeEstimation",
-				"Active": false,
-				"Inst_Parameters": {
-					"Camera": [ "EntityRef", "CameraAndIMU" ],
-					"LoopFreqHz": 60.0
-				},
-				"Source": "Local/Repos/SPS-Star-Tracker/Systems/StarTrackerAttitudeEstimate.py",
-				"Type": "Python"
-			},
-			{
-				"Nametag": "SPS_GUI",
-				"Active": false,
-				"Inst_Parameters": {
-					"Camera": [ "EntityRef", "CameraAndIMU" ],
-					"CameraControl": {
-						"cameraDirection": 1.0,
-						"cameraPitchRate_deg_s": 30.0,
-						"cameraPitchRate_delta": 5.0,
-						"cameraPitch_deg": 50.0,
-						"cameraYawRate_deg_s": 30.0,
-						"cameraYawRate_delta": 5.0,
-						"cameraYaw_deg": -150.0
-					},
-					"J2000": [ "EntityRef", "SSB" ],
-					"LoopFreqHz": 60.0,
-					"Pawn": [ "EntityRef", "Spectator" ]
-				},
-				"Source": "Local/Repos/SPS/Systems/SPS_GUI.py",
-				"Type": "Python"
-			},
-			{
 				"Nametag": "SetupSPSAtLocation",
+				"Source": "Local/Repos/SPS-Star-Tracker/Systems/SetupSPSAtLocation.py",
+				"Type": "Python",
 				"Active": true,
 				"Inst_Parameters": {
 					"LoopFreqHz": 60.0,
-					"Pawn": [ "EntityRef", "Spectator" ],
+					"Pawn": [ "EntityRef", "Player1" ],
 					"SPS": [ "EntityRef", "TripodBase" ],
 					"DatasetPriorities": [
 						"array",
@@ -145,6 +108,7 @@
 						0.0,
 						1.0,
 						2.0,
+						3.0,
 						3.0
 					],
 					"Datasets": [
@@ -153,11 +117,193 @@
 						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
 						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
 						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
-						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters"
-					]
-				},
-				"Source": "Local/Repos/SPS-Star-Tracker/Systems/SetupSPSAtLocation.py",
-				"Type": "Python"
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters",
+						"Moon/Local/Apollo17/APOLLO17_DTM_150CM"
+					],
+					"LocalMap": true,
+					"LatitudeBounds": [ "doubleV2", 20.01, 20.35 ],
+                	"LongitudeBounds": [ "doubleV2", 30.45, 30.88 ],
+					"LatitudeBounds_ConnectingRidge": [ "doubleV2", -89.54, -89.43 ],
+                	"LongitudeBounds_ConnectingRidge": [ "doubleV2", -143.0, -133.0 ],
+					"LatitudeBounds_Apollo17": [ "doubleV2", 20.01, 20.35 ],
+                	"LongitudeBounds_Apollo17": [ "doubleV2", 30.45, 30.88 ]
+				}
+			},
+			{
+				"Nametag": "SPSEstimate",
+				"Source": "Local/Repos/SPS-Star-Tracker/Systems/SPSEstimate.py",
+				"Type": "Python",
+				"Active": true,
+				"Inst_Parameters": {
+					"LoopFreqHz": 60.0,
+					"J2000Frame": [ "EntityRef", "SSB" ],
+					"Pawn": [ "EntityRef", "Player1" ],
+					"SPS": [ "EntityRef", "TripodBase" ],
+					"Camera": [ "EntityRef", "CameraAndIMU" ],
+					"TopDownCamera": [ "EntityRef", "TopDownCamera" ],
+					"Planet": [ "EntityRef", "Moon" ],
+					"MapName": "Apollo17"
+				}
+			},
+			{
+				"Nametag": "SPSGuessr",
+				"Source": "Local/Repos/SPS-Star-Tracker/Systems/SPSGuessr.py",
+				"Type": "Python",
+				"Active": true,
+				"Inst_Parameters": {
+					"LoopFreqHz": 60.0,
+					"Pawn": [ "EntityRef", "Player1" ],
+					"SPS": [ "EntityRef", "TripodBase" ],
+					"Planet": [ "EntityRef", "Moon" ]
+				}
+			},
+			{
+				"Nametag": "Eridani",
+				"Source": "EridaniOffline/bin/EridaniOffline",
+				"Type": "Normal",
+				"Active": true,
+				"Frequency": 1.0,
+				"FreqType": "Sim",
+				"Inst_Parameters": {
+					"RenderStars": true,
+					"RenderPlanets": false,
+					"RenderStartupTest": false,
+					"StopAfterInit": false,
+					"Epoch": [ "timestamp", "2000-01-01T11:58:50.815968Z" ],
+					"J2000": [ "timestamp", "1999-12-31T23:59:55.000000Z" ],
+					"Pawn": [ "EntityRef", "Player1" ],
+					"Camera": [ "EntityRef", "CameraAndIMU" ],
+					"DataDir": "Local/Repos/SPS/Data/",
+					"CameraParams": {
+						"FocalLength_mm": 6.0,
+						"FStop": 2.8,
+						"TStop": 2.93,
+						"ISO": 6400.0,
+						"ShutterSpeed_s": 1.0,
+						"SensorSize_px_x": [ "int32", 1024 ],
+						"SensorSize_px_y": [ "int32", 1024 ],
+						"SensorSize_mm_x": 2.1159237685,
+						"SensorSize_mm_y": 2.1159237685,
+						"BoresightZ": false
+					},
+					"RenderParams": {
+						"ImageFormat": "png",
+						"SingleImageMode": false,
+						"ImageNameOverride": "EridaniRender",
+						"NamingScheme": "increment",
+						"NOTNamingScheme": "radec",
+						"DoPlanetAltitudeRaymarch": true,
+						"PlanetAltitudeRaymarchCutoff_m": 100e6,
+						"Wavelengths_mm": [ "doubleV3", 540e-6, 540e-6, 540e-6 ],
+						"Wavelengths_mm_Realistic": [ "doubleV3", 680e-6, 540e-6, 440e-6 ],
+						"starmapMagnitude": 11.0,
+						"starMaxPixelRadius": 8.0,
+						"NumRaytraceSamples": [ "int32", 1 ],
+						"doBloom": false,
+						"doStarmap": true,
+						"outputPath": "Local/Repos/SPS-Star-Tracker/output/Moon/Renders/",
+						"texturePath": "Local/Repos/SPS/Data/PlanetTextures/",
+						"PlanetOverrides": [ "array", "string", "Moon", "Earth" ]
+					},
+					"Bloom": {
+						"Red": "Local/Repos/SPS/Data/ConvolutionBloom/Aperture_Hexagon_Small.tif",
+						"Green": "Local/Repos/SPS/Data/ConvolutionBloom/Aperture_Hexagon_Medium.tif",
+						"Blue": "Local/Repos/SPS/Data/ConvolutionBloom/Aperture_Hexagon_Large.tif"
+					},
+					"Starmap": {
+						"Red": "Local/Repos/SPS/Data/Starmaps/milkyway_R_4k.tif",
+						"Green": "Local/Repos/SPS/Data/Starmaps/milkyway_G_4k.tif",
+						"Blue": "Local/Repos/SPS/Data/Starmaps/milkyway_B_4k.tif"
+					},
+					"Spectral": {
+						"OutputRaw": false,
+						"ChannelBlend": "AVG",
+						"SolarSpectrum": {
+						"NumSamples": [ "int32", 20 ],
+						"WavelengthBounds_m": [ "doubleV2", 3e-7, 8e-7 ],
+						"SamplingMethod": "linspace"
+						},
+						"NumCameraSensorBands": [ "int32", 1 ],
+						"CameraSensorBands": {
+						"0": {
+							"Response": [
+							"array",
+							"doubleV2",
+							[ 0.400e-6, 0.5645161290322581 ],
+							[ 0.450e-6, 0.7096774193548387 ],
+							[ 0.500e-6, 0.8387096774193549 ],
+							[ 0.600e-6, 0.967741935483871 ],
+							[ 0.650e-6, 1.0 ],
+							[ 0.700e-6, 0.9354838709677419 ],
+							[ 0.800e-6, 0.6935483870967742 ],
+							[ 0.900e-6, 0.3709677419354839 ],
+							[ 1.000e-6, 0.0967741935483871 ]
+							]
+						}
+						},
+						"RGB_CameraSensorBands": {
+						"0": {
+							"Response": [
+							"array",
+							"doubleV2",
+							[ 0.400e-6, 0.11458333333333333 ],
+							[ 0.500e-6, 0.010416666666666666 ],
+							[ 0.575e-6, 0.041666666666666664 ],
+							[ 0.600e-6, 1.0 ],
+							[ 0.650e-6, 0.9583333333333334 ],
+							[ 0.700e-6, 0.9375 ],
+							[ 0.800e-6, 0.75 ],
+							[ 0.900e-6, 0.4583333333333333 ],
+							[ 1.000e-6, 0.13541666666666666 ]
+							]
+						},
+						"1": {
+							"Response": [
+							"array",
+							"doubleV2",
+							[ 0.400e-6, 0.0851063829787234 ],
+							[ 0.475e-6, 0.1702127659574468 ],
+							[ 0.525e-6, 0.9361702127659575 ],
+							[ 0.540e-6, 1.0 ],
+							[ 0.560e-6, 0.9574468085106383 ],
+							[ 0.625e-6, 0.18085106382978725 ],
+							[ 0.675e-6, 0.1702127659574468 ],
+							[ 0.800e-6, 0.6808510638297872 ],
+							[ 1.000e-6, 0.13829787234042554 ]
+							]
+						},
+						"2": {
+							"Response": [
+							"array",
+							"doubleV2",
+							[ 0.400e-6, 0.5277777777777778 ],
+							[ 0.470e-6, 1.0 ],
+							[ 0.530e-6, 0.25 ],
+							[ 0.570e-6, 0.1111111111111111 ],
+							[ 0.625e-6, 0.09722222222222222 ],
+							[ 0.700e-6, 0.19444444444444445 ],
+							[ 0.775e-6, 0.2222222222222222 ],
+							[ 0.810e-6, 0.8611111111111112 ],
+							[ 1.000e-6, 0.18055555555555555 ]
+							]
+						}
+						}
+					},
+					"Datasets": {
+						"Moon": {
+						"Altimetry": [
+							"array",
+							"string",
+							"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014"
+						],
+						"AltimetryPriorities": [
+							"array",
+							"double",
+							0.0
+						]
+						}
+					}
+				}
 			}
 		],
 		"Taskflows": []
@@ -168,13 +314,18 @@
 			"GraphicsFrame": [ "EntityRef", "Moon" ],
 			"J2000Frame": [ "EntityRef", "SSB" ],
 			"Time": {
-				"StartDateTAI": [ "timestamp", "2026-02-20T10:19:11.000000Z" ],
-				"Timescale": 0.0,
+				"StartDateTAI": [ "timestamp", "2027-03-15T11:25:00.000000Z" ],
+				"Timescale": 1.0,
 				"UseCurrentTime": false
 			}
 		},
 		"entities": [
 			{
+				"#Required": {
+					"Name": "Player1",
+					"Systems": [ "SnapPawnToPlanet" ],
+					"Type": "Pawn"
+				},
 				"#Pawn": {
 					"BP_Path": "/Game/SpaceCraft_UI/FlatScreen/UIP2D_Surface.UIP2D_Surface_C",
 					"CamProjMatrix": [
@@ -216,7 +367,8 @@
 							"Name": "SPSGuessr",
 							"Params": {
 								"Planet": [ "EntityRef", "Moon" ],
-								"TopDownCamera": [ "EntityRef", "TopDownCamera" ]
+								"TopDownCamera": [ "EntityRef", "TopDownCamera" ],
+								"SPS": [ "EntityRef", "TripodBase" ]
 							},
 							"Slot": "Right",
 							"Static": true,
@@ -225,13 +377,8 @@
 					},
 					"GraphicsFrame": [ "EntityRef", "Moon" ],
 					"Is_Possessed": false,
-					"Role_Name": "Surface Explorer",
+					"Role_Name": "Player 1",
 					"Username": "(No User)"
-				},
-				"#Required": {
-					"Name": "Spectator",
-					"Systems": [ "SnapPawnToPlanet" ],
-					"Type": "Pawn"
 				},
 				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
@@ -252,7 +399,9 @@
 					"Scale": 1.0
 				},
 				"Height": 1.8,
-				"Location": [ "doubleV3", -12329.0, -11299.0, -1739272.0 ],
+				"Location": [ "doubleV3", 1398961.0, 832940.0, 598759.0 ],
+				"Location_ConnectingRidge": [ "doubleV3", -12329.0, -11299.0, -1739272.0 ],
+				"Location_Apollo17": [ "doubleV3", 1398961.0, 832940.0, 598759.0 ],
 				"MovementSpeed": 10.0,
 				"NoClip": true,
 				"Rotation": [ "doubleV4", 0.0, 0.0, 0.0, 1.0 ],
@@ -260,6 +409,11 @@
 				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
 			},
 			{
+				"#Required": {
+					"Name": "TripodBase",
+					"Systems": [ "SnapAssetToPlanet" ],
+					"Type": "Object_Loaded"
+				},
 				"#Object_Loaded": {
 					"Materials": {
 						"0": {
@@ -298,11 +452,6 @@
 					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
 					"schema": [ "array", "int16", 4, 0, 0 ]
 				},
-				"#Required": {
-					"Name": "TripodBase",
-					"Systems": [ "SnapAssetToPlanet" ],
-					"Type": "Object_Loaded"
-				},
 				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AlignToSurfaceNormal": true,
 				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
@@ -317,12 +466,34 @@
 					"Scale": 1.0
 				},
 				"Height": 0.0,
-				"Location": [ "doubleV3", -12329.0, -11296.0, -1739272.0 ],
+				"Location": [ "doubleV3", 1398961.0, 832943.0, 598759.0 ],
+				"Location_ConnectingRidge": [ "doubleV3", -12329.0, -11296.0, -1739272.0 ],
+				"Location_Apollo17": [ "doubleV3", 1398961.0, 832943.0, 598759.0 ],
 				"RotateX": true,
 				"Rotation": [ "doubleV4", 0.7316866570919797, 0.2801448505732491, 0.5803302778825947, 0.22219421032863568 ],
-				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"NumberOfLocations": [ "int32", 5 ],
+				"CurrentLocationIndex": [ "int32", 1 ],
+				"Score": [ "int32", 0 ],
+				"Scoring": {
+					"NormalizationDistance": 2000.0,
+					"MinimumDistance": 25.0
+				},
+				"UpdateMapFromSPS": false,
+				"MapCenter": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"MapNorth": [ "doubleV3", 1.0, 0.0, 0.0 ],
+				"MapEast": [ "doubleV3", 0.0, 1.0, 0.0 ],
+				"MapScale": 1000.0,
+				"CameraHeight": 20000.0,
+				"MapImage": "",
+				"AllSystemsReady": false
 			},
 			{
+				"#Required": {
+					"Name": "TripodLeg1",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
 				"#Object_Loaded": {
 					"Materials": {
 						"0": {
@@ -359,11 +530,6 @@
 					"Mesh_Path": "Local/Repos/SPS/Models/SPS_TripodLeg.glb",
 					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
 					"schema": [ "array", "int16", 3, 0, 0 ]
-				},
-				"#Required": {
-					"Name": "TripodLeg1",
-					"Systems": [],
-					"Type": "Object_Loaded"
 				},
 				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
@@ -383,6 +549,11 @@
 				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
 			},
 			{
+				"#Required": {
+					"Name": "TripodLeg2",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
 				"#Object_Loaded": {
 					"Materials": {
 						"0": {
@@ -419,11 +590,6 @@
 					"Mesh_Path": "Local/Repos/SPS/Models/SPS_TripodLeg.glb",
 					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
 					"schema": [ "array", "int16", 3, 0, 0 ]
-				},
-				"#Required": {
-					"Name": "TripodLeg2",
-					"Systems": [],
-					"Type": "Object_Loaded"
 				},
 				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
@@ -443,6 +609,11 @@
 				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
 			},
 			{
+				"#Required": {
+					"Name": "TripodLeg3",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
 				"#Object_Loaded": {
 					"Materials": {
 						"0": {
@@ -480,11 +651,6 @@
 					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
 					"schema": [ "array", "int16", 3, 0, 0 ]
 				},
-				"#Required": {
-					"Name": "TripodLeg3",
-					"Systems": [],
-					"Type": "Object_Loaded"
-				},
 				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
@@ -503,6 +669,11 @@
 				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
 			},
 			{
+				"#Required": {
+					"Name": "CameraAndIMU",
+					"Systems": [],
+					"Type": "Object_Loaded"
+				},
 				"#Object_Loaded": {
 					"Materials": {
 						"0": {
@@ -904,11 +1075,6 @@
 					"Scale3D": [ "doubleV3", 100.0, 100.0, 100.0 ],
 					"schema": [ "array", "int16", 3, 0, 0 ]
 				},
-				"#Required": {
-					"Name": "CameraAndIMU",
-					"Systems": [],
-					"Type": "Object_Loaded"
-				},
 				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
 				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
@@ -923,7 +1089,8 @@
 				},
 				"Location": [ "doubleV3", 0.0, 0.0, 1.39142 ],
 				"RotateX": true,
-				"Rotation": [ "doubleV4", 3.3813515522625497e-09, 0.4226182497380068, -1.336140125184882e-06, 0.9063077926326124 ],
+				"AngledRotation": [ "doubleV4", 3.3813515522625497e-09, 0.4226182497380068, -1.336140125184882e-06, 0.9063077926326124 ],
+				"Rotation": [ "doubleV4", 0.0, 0.707, 0.0, 0.707 ],
 				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ]
 			},
 			{
@@ -932,9 +1099,43 @@
 					"Type": "Camera",
 					"Systems": []
 				},
-				"#Camera": {
-
-				}
+				"Dynamics": {
+					"Mass": 1.0,
+					"Propagator": "Custom",
+					"ResidentFrame": [ "EntityRef", "Moon" ]
+				},
+				"Location": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Rotation": [ "doubleV4", 0.0, 0.0, 0.0, 1.0 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ]
+			},
+			{
+				"#Required": {
+				  "Name": "ApolloDM",
+				  "Type": "BP",
+				  "Systems": [ "SnapAssetToPlanet" ]
+				},
+				"#BP": {
+				  "BP_Path": "/Game/StaticMeshes/Vehicles/Lander/ApolloLM/ApolloLM_Descent.ApolloLM_Descent_C"
+				},
+				"Dynamics": {
+				  "Propagator": "Custom",
+				  "ResidentFrame": [ "EntityRef", "Moon" ]
+				},
+				"Graphics": {
+				  "Scale": 1,
+				  "RenderFar": true,
+				  "VisualRadius_m": 3.0
+				},
+				"Height": 1.75,
+				"Location": [ "doubleV3", 1398941.0, 833003.0, 598759.0 ],
+				"Velocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Acceleration": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"Rotation": [ "doubleV4", 0.1517151, -0.5517385, 0.2174381, 0.7907515 ],
+				"AngVelocity": [ "doubleV3", 0.0, 0.0, 0.0 ],
+				"AngAcceleration": [ "doubleV3", 0.0, 0.0, 0.0 ]
 			}
 		]
 	}
