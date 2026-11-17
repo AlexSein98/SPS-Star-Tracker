@@ -25,6 +25,7 @@ import hashlib
 import shutil
 from PIL import Image
 import astropy.time as astrotime
+import matplotlib.pyplot as plt
 
 thisRepo = os.path.join(str(st.path_utils.GetLocalAssetsDir()), "Repos", "SPS-Star-Tracker")
 localOutput = str(st.path_utils.GetLocalOutputDir())
@@ -44,13 +45,20 @@ np.set_printoptions(suppress=True)
 ##################################
 
 this = st.GetThisSystem()
-planetData = st.ProcPlanet.DataStore()
 
-moonGlobalData = st.path_utils.AssetPathToReal(st.AssetType.PlanetData, "Core/Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014")
-args = st.ProcPlanet.GeoBin_Extra_Args()
-args.cubicInterp = True
+datasets: list[str] = this.GetParamArray(st.VarType.string, "Datasets")
+priorities: list[float] = this.GetParamArray(st.VarType.double, "DatasetPriorities")
 
-planetData.AddGeoBinAltimetryLayer(1.0, moonGlobalData, args)
+planetDataForRendering = st.ProcPlanet.DataStore()
+for i in range(len(datasets)):
+    dataPath = st.path_utils.AssetPathToReal(st.AssetType.PlanetData, datasets[i])
+    planetDataForRendering.AddGeoBinAltimetryLayer(priorities[i], dataPath, st.ProcPlanet.GeoBin_Extra_Args())
+
+planetDataForSPS = st.ProcPlanet.DataStore()
+planetDataForSPS.AddGeoBinAltimetryLayer(0.0, st.path_utils.AssetPathToReal(
+    st.AssetType.PlanetData, "Core/Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014"),
+    st.ProcPlanet.GeoBin_Extra_Args())
+
 
 os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
 
@@ -218,16 +226,16 @@ def SPSEstimate(paramMap: st.ParamMap, timestamp: st.timestamp):
     T_g_c: npt.NDArray = np.identity(3)
 
     # Coarse estimates
-    r_coarse_1 = st.ProcPlanet.SPS.CoarseEstimate(T_i_b, T_i_c, T_g_c, gravity, radiusEquatorial, mu, 
-                                                  Omega, planetData, planetFixedFrame, False, np.zeros(3), 0.0, 20)
-    r_coarse_2 = st.ProcPlanet.SPS.CoarseEstimate(T_i_b, T_i_c, T_g_c, gravity, radiusEquatorial, mu, 
-                                                  Omega, planetData, planetFixedFrame, True, r_coarse_1, 0.0, 20)
+    r_coarse_1 = st.ProcPlanet.SPS.CoarseEstimate(T_i_b, T_i_c, T_g_c, gravity, radiusEquatorial, mu, Omega, 
+                                                  planetDataForSPS, planetFixedFrame, False, np.zeros(3), 0.0, 20)
+    r_coarse_2 = st.ProcPlanet.SPS.CoarseEstimate(T_i_b, T_i_c, T_g_c, gravity, radiusEquatorial, mu, Omega, 
+                                                  planetDataForSPS, planetFixedFrame, True, r_coarse_1, 0.0, 20)
 
     tol: float = 10.0  # m
     gradientWalkFactor: float = 1.0
     fineOutputs = st.ProcPlanet.SPS.FineEstimate(r_coarse_2, T_i_b, T_i_c, T_g_c, gravity, radiusEquatorial, 
-                                                 Omega, planetData, planetFixedFrame, gradientWalkFactor, tol, 
-                                                 False, 0, 0.0, 20)
+                                                 Omega, planetDataForSPS, planetFixedFrame, gradientWalkFactor, 
+                                                 tol, False, 0, 0.0, 20)
 
     r_bestEstimate = fineOutputs.pos
     r_true = spsDevice.getLocation().WRT_ExprIn(planetFixedFrame)
@@ -241,15 +249,18 @@ def SPSEstimate(paramMap: st.ParamMap, timestamp: st.timestamp):
     st.OnScreenLogMessage("Finished SPS position estimate!", "SPSEstimate", st.Severity.Info)
 
     nwu = st.PlanetUtils.NorthWestUpFromLocation(r_bestEstimate, radiusEquatorial)
-    spsDevice.SetParam(st.VarType.doubleV3, "MapNorth", nwu.north())
-    spsDevice.SetParam(st.VarType.doubleV3, "MapEast", -nwu.west())
+    north = nwu.north()
+    west = nwu.west()
+    up = nwu.up()
+    spsDevice.SetParam(st.VarType.doubleV3, "MapNorth", north)
+    spsDevice.SetParam(st.VarType.doubleV3, "MapEast", -west)
 
-    imageWidth_m = spsDevice.GetParam(st.VarType.double, "MapScale")
+    mapScale_m = spsDevice.GetParam(st.VarType.double, "MapScale")
     cameraHeight_m = spsDevice.GetParam(st.VarType.double, "CameraHeight")
-    fov: float = 2.0 * np.arctan(imageWidth_m / (2.0 * cameraHeight_m))
+    fov: float = 2.0 * np.arctan(mapScale_m / (2.0 * cameraHeight_m))
 
-    topDownCamera.setLocation(st.frames.FramedLoc(r_bestEstimate + nwu.up() * cameraHeight_m, planetFixedFrame))
-    topDownCameraRot = np.vstack((-nwu.up(), nwu.west(), nwu.north()))
+    topDownCamera.setLocation(st.frames.FramedLoc(r_bestEstimate + up * cameraHeight_m, planetFixedFrame))
+    topDownCameraRot = np.vstack((-up, west, north))
     topDownCamera.setRotation(st.frames.FramedRot(topDownCameraRot, planetFixedFrame))
 
     time.sleep(0.1)
@@ -257,31 +268,69 @@ def SPSEstimate(paramMap: st.ParamMap, timestamp: st.timestamp):
     captureProperties = st.CaptureImageProperties()
     captureProperties.FOV = np.rad2deg(fov)
     # captureProperties.FOV = fov
-    captureProperties.nonphys_EV = 10
-    captureProperties.ResolutionX = 1024
-    captureProperties.ResolutionY = 1024
+    captureProperties.nonphys_EV = spsDevice.GetParam(st.VarType.double, "ExposureValue")
+
+    imageResolution: int = spsDevice.GetParam(st.VarType.int32, "ImageResolution")
+    captureProperties.ResolutionX = imageResolution
+    captureProperties.ResolutionY = imageResolution
 
     st.OnScreenLogMessage("Started overhead image capture!", "SPSEstimate", st.Severity.Info)
     capturedImage = st.camera.CaptureImageBlocking(topDownCamera, captureProperties)
     st.OnScreenLogMessage("Completed overhead image capture!", "SPSEstimate", st.Severity.Info)
     
+    savePath = os.path.join(st.path_utils.GetLocalOutputDir(), "SPSGuessr")
+    os.makedirs(savePath, exist_ok=True)
     if capturedImage is not None:
         imageR = np.asarray(capturedImage.as_RGB8().PixelsR).reshape((captureProperties.ResolutionX, captureProperties.ResolutionY))
         imageG = np.asarray(capturedImage.as_RGB8().PixelsG).reshape((captureProperties.ResolutionX, captureProperties.ResolutionY))
         imageB = np.asarray(capturedImage.as_RGB8().PixelsB).reshape((captureProperties.ResolutionX, captureProperties.ResolutionY))
         imageRGB = Image.fromarray(np.dstack((imageR, imageG, imageB)).astype(np.uint8))
 
-        savePath = os.path.join(st.path_utils.GetLocalOutputDir(), "SPSGuessr")
-        os.makedirs(savePath, exist_ok=True)
-        imageName = f"SPSGuessrOverheadImage.png"
-        imageFullPath = os.path.join(savePath, imageName)
-        imageRGB.save(imageFullPath)
+        colorImageName = f"SPSGuessrOverheadImage.png"
+        colorImageFullPath = os.path.join(savePath, colorImageName)
+        imageRGB.save(colorImageFullPath)
+        spsDevice.SetParam(st.VarType.string, "ColorImage", colorImageFullPath)
 
-        spsDevice.SetParam(st.VarType.string, "MapImage", imageFullPath)
-        spsDevice.SetParam(st.VarType.bool, "UpdateMapFromSPS", True)
         st.OnScreenLogMessage("Saved overhead image!", "SPSEstimate", st.Severity.Info)
     else:
         st.OnScreenLogMessage("Failed to save overhead image because image was None", "SPSEstimate", st.Severity.Info)
+
+    altimetryImage = np.zeros((imageResolution, imageResolution))
+    slopeImage = np.zeros((imageResolution, imageResolution))
+    northSamplePoints = np.linspace(0.5, -0.5, imageResolution)
+    westSamplePoints = np.linspace(0.5, -0.5, imageResolution)
+    for i in range(len(northSamplePoints)):
+        for j in range(len(westSamplePoints)):
+            r_ij: npt.NDArray = r_bestEstimate + mapScale_m * (northSamplePoints[i] * north + westSamplePoints[j] * west)
+            snappedLoc, normal = st.ProcPlanet.SampleGround(planetDataForRendering, r_ij, radiusEquatorial, 0.0, 22)
+            altimetryImage[i, j] = np.linalg.norm(snappedLoc) - radiusEquatorial
+            slopeImage[i, j] = np.arccos(np.dot(normalize(snappedLoc), normal))
+
+    st.OnScreenLogMessage("Done generating altimetry and slope maps!", "SPSEstimate", st.Severity.Info)
+
+    figAltimetry = plt.figure()
+    axAltimetry = figAltimetry.add_subplot(111)
+    axAltimetry.set_axis_off()
+    axAltimetry.imshow(altimetryImage, cmap='gist_earth', vmin=np.min(altimetryImage), vmax=np.max(altimetryImage))
+    altimetryImageName = f"SPSGuessrAltimetryImage.png"
+    altimetryImageFullPath = os.path.join(savePath, altimetryImageName)
+    figAltimetry.savefig(altimetryImageFullPath, dpi=300, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    figSlope = plt.figure()
+    axSlope = figSlope.add_subplot(111)
+    axSlope.set_axis_off()
+    axSlope.imshow(slopeImage, cmap='gist_earth', vmin=np.min(slopeImage), vmax=np.max(slopeImage))
+    slopeImageName = f"SPSGuessrSlopeImage.png"
+    slopeImageFullPath = os.path.join(savePath, slopeImageName)
+    figSlope.savefig(slopeImageFullPath, dpi=300, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    st.OnScreenLogMessage("Saved altimetry and slope images!", "SPSEstimate", st.Severity.Info)
+
+    spsDevice.SetParam(st.VarType.string, "AltimetryImage", altimetryImageFullPath)
+    spsDevice.SetParam(st.VarType.string, "SlopeImage", slopeImageFullPath)
+    spsDevice.SetParam(st.VarType.bool, "UpdateMapFromSPS", True)
 
 
 def SPSEstimateTryCatch(paramMap: st.ParamMap, timestamp: st.timestamp):

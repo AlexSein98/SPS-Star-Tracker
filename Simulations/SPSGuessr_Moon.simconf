@@ -142,7 +142,25 @@
 					"Camera": [ "EntityRef", "CameraAndIMU" ],
 					"TopDownCamera": [ "EntityRef", "TopDownCamera" ],
 					"Planet": [ "EntityRef", "Moon" ],
-					"MapName": "Apollo17"
+					"MapName": "Apollo17",
+					"DatasetPriorities": [
+						"array",
+						"double",
+						0.0,
+						1.0,
+						2.0,
+						3.0,
+						3.0
+					],
+					"Datasets": [
+						"array",
+						"string",
+						"Moon/Global/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPole75_30m",
+						"Moon/Local/SouthPole/LRO_LOLA_DEM_SPolar875_10m",
+						"Moon/Local/SouthPole/LDEM_Site01-Site-04_upscale_craters",
+						"Moon/Local/Apollo17/APOLLO17_DTM_150CM"
+					]
 				}
 			},
 			{
@@ -476,7 +494,7 @@
 				"CurrentLocationIndex": [ "int32", 1 ],
 				"Score": [ "int32", 0 ],
 				"Scoring": {
-					"NormalizationDistance": 2000.0,
+					"NormalizationDistance": 1414.2,
 					"MinimumDistance": 25.0
 				},
 				"UpdateMapFromSPS": false,
@@ -485,7 +503,11 @@
 				"MapEast": [ "doubleV3", 0.0, 1.0, 0.0 ],
 				"MapScale": 1000.0,
 				"CameraHeight": 20000.0,
-				"MapImage": "",
+				"ImageResolution": [ "int32", 512 ],
+				"ExposureValue": 10.0,
+				"ColorImage": "",
+				"AltimetryImage": "",
+				"SlopeImage": "",
 				"AllSystemsReady": false
 			},
 			{
