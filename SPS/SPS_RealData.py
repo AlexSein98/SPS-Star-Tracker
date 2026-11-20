@@ -51,6 +51,10 @@ import astropy.time as astrotime
 from dataclasses import dataclass, field
 import pyexiv2 as xmp
 
+from PIL import Image
+import tetra3
+t3 = tetra3.Tetra3()
+
 # from SPS.global_config import globalConfig
 from py_src.star.python.transformations import latlon_to_T, T_to_latlon, r_to_latlonalt, r_hat_to_ra_dec, normalize
 
@@ -778,38 +782,49 @@ if not Path(attitudeEstDataPath).is_file():
 
     idx: int = 0
     for image_filename in image_names:
-        image_name += [image_filename]
-        # st.OnScreenLogMessage("===================================================", "SPSTraverse", st.Severity.Info)
-        # st.OnScreenLogMessage(image_filename, "SPSTraverse", st.Severity.Info)
+        img = Image.open(str(image_filename))
+        solution = t3.solve_from_image(img)
+        ra = solution["RA"]
+        de = solution["Dec"]
+        roll = solution["Roll"]
+        q_est = st.math.DCM_to_Quat(R3(ra) @ R2(-de) @ R1(roll))
+        qv0 += [-q_est[0]]
+        qv1 += [-q_est[1]]
+        qv2 += [-q_est[2]]
+        qs += [q_est[3]]
 
-        #run star tracker
-        solve_start_time = time.time()
+        # image_name += [image_filename]
+        # # st.OnScreenLogMessage("===================================================", "SPSTraverse", st.Severity.Info)
+        # # st.OnScreenLogMessage(image_filename, "SPSTraverse", st.Severity.Info)
 
-        q_est, idmatch, nmatches, x_obs, rtrnd_img = main.star_tracker(
-                image_filename, cam_file, m=m, q=q, x_cat=x_cat, k=k, indexed_star_pairs=indexed_star_pairs, darkframe_file=darkframe_file_path, 
-                min_star_area=min_star_area, max_star_area=max_star_area, isa_thresh=isa_thresh, nmatch=nmatch, n_stars=max_num_stars_to_process,
-                low_thresh_pxl_intensity=low_thresh_pxl_intensity,hi_thresh_pxl_intensity=hi_thresh_pxl_intensity,graphics=graphics,verbose=VERBOSE, watchdog=5)
+        # #run star tracker
+        # solve_start_time = time.time()
 
-        solve_time += [time.time()-solve_start_time]
+        # q_est, idmatch, nmatches, x_obs, rtrnd_img = main.star_tracker(
+        #         image_filename, cam_file, m=m, q=q, x_cat=x_cat, k=k, indexed_star_pairs=indexed_star_pairs, darkframe_file=darkframe_file_path, 
+        #         min_star_area=min_star_area, max_star_area=max_star_area, isa_thresh=isa_thresh, nmatch=nmatch, n_stars=max_num_stars_to_process,
+        #         low_thresh_pxl_intensity=low_thresh_pxl_intensity,hi_thresh_pxl_intensity=hi_thresh_pxl_intensity,graphics=graphics,verbose=VERBOSE, watchdog=5)
 
-        # Collect data
-        try:
-            assert not np.any(np.isnan(q_est))
-            if VERBOSE:
-                st.OnScreenLogMessage('est q: ' + str(q_est)+'\n', "SPSTraverse", st.Severity.Info)
-            q_rotate = np.array([0.5, -0.5, 0.5, 0.5])  # w-last quaternion
-            q_est = quat_mult(q_est, q_rotate)  # w-last quaternion
-            qs += [q_est[3]]
-            qv0 += [-q_est[0]]
-            qv1 += [-q_est[1]]
-            qv2 += [-q_est[2]]
-        except AssertionError:
-            if VERBOSE:
-                st.OnScreenLogMessage('NO VALID STARS FOUND\n', "SPSTraverse", st.Severity.Info)
-            qs += [999]
-            qv0 += [999]
-            qv1 += [999]
-            qv2 += [999]
+        # solve_time += [time.time()-solve_start_time]
+
+        # # Collect data
+        # try:
+        #     assert not np.any(np.isnan(q_est))
+        #     if VERBOSE:
+        #         st.OnScreenLogMessage('est q: ' + str(q_est)+'\n', "SPSTraverse", st.Severity.Info)
+        #     q_rotate = np.array([0.5, -0.5, 0.5, 0.5])  # w-last quaternion
+        #     q_est = quat_mult(q_est, q_rotate)  # w-last quaternion
+        #     qs += [q_est[3]]
+        #     qv0 += [-q_est[0]]
+        #     qv1 += [-q_est[1]]
+        #     qv2 += [-q_est[2]]
+        # except AssertionError:
+        #     if VERBOSE:
+        #         st.OnScreenLogMessage('NO VALID STARS FOUND\n', "SPSTraverse", st.Severity.Info)
+        #     qs += [999]
+        #     qv0 += [999]
+        #     qv1 += [999]
+        #     qv2 += [999]
 
         ttime += [time.time()]
         sram  += [psutil.virtual_memory().percent]
